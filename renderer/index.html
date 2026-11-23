@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IG Post Preview</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="top">
+    <button id="add" class="btn">Add images</button>
+    <input id="file" type="file" accept="image/*" multiple hidden />
+    <label>Ratio
+      <select id="ratio">
+        <option value="auto">Auto (from first slide)</option>
+        <option value="3:4">3:4 (1080×1440)</option>
+        <option value="4:5">4:5 (1080×1350)</option>
+        <option value="1:1">1:1 (1080×1080)</option>
+        <option value="1.91:1">1.91:1 (1080×566)</option>
+      </select>
+    </label>
+    <label>Carousel
+      <select id="mode">
+        <option value="match">Match first slide (classic)</option>
+        <option value="mixed">Mixed / Original (approx.)</option>
+      </select>
+    </label>
+    <label>Phone
+      <select id="theme">
+        <option value="light">Light</option>
+        <option value="dark">Dark</option>
+      </select>
+    </label>
+    <span id="count" class="muted"></span>
+    <span class="spacer"></span>
+    <button id="export" class="btn primary">Export JPEGs…</button>
+  </header>
+
+  <main>
+    <aside id="strip" class="strip" aria-label="Slides"></aside>
+    <section id="stage" class="stage">
+      <div id="phone" class="phone light"></div>
+      <div id="empty" class="empty">Drop images here or click <b>Add images</b></div>
+    </section>
+    <aside id="panel" class="panel"></aside>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="ratios.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

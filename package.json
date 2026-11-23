@@ -1,0 +1,33 @@
+{
+  "name": "ig-post-preview",
+  "version": "0.1.0",
+  "description": "Preview, reorder and edit images as they will appear in an Instagram post",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node test/logic.test.js",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "local.ig-post-preview",
+    "productName": "IG Post Preview",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  }
+}
