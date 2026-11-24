@@ -21,7 +21,7 @@ h2, h3 { margin: 0; font-weight: 600; }
 .top { display: flex; align-items: center; gap: 16px; height: 52px; padding: 0 16px; background: var(--bg); border-bottom: 1px solid var(--line); flex: none; }
 .brand { display: flex; align-items: center; gap: 10px; }
 .logo { width: 26px; height: 26px; flex: none; border-radius: 6px; }
-.wordmark { font: 600 16px/1 "Source Code Pro", ui-monospace, Consolas, "DejaVu Sans Mono", monospace; letter-spacing: -.01em; }
+.wordmark { font: 600 16px/1 "Source Code Pro", ui-monospace, Consolas, "DejaVu Sans Mono", monospace; letter-spacing: .08em; text-transform: uppercase; }
 .views { margin: 0 auto 0 0; display: flex; align-items: center; gap: 10px; }
 .top-actions { display: flex; align-items: center; gap: 8px; }
 

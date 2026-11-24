@@ -788,7 +788,7 @@
       lastWheel = now;
       const hit = hitLayer(toNorm(e));
       if (hit) { state.layer = hit.id; setScale(hit, scaleOf(hit) * f); }
-      else if (!A(cur().asset).blank) cur().zoom = L.clamp(cur().zoom * f, 1, 4);
+      else if (!A(cur().asset).blank) cur().zoom = L.clamp(cur().zoom * f, 0.5, 4);
       renderPanel();
       refresh();
     }, { passive: false });
@@ -910,6 +910,7 @@
     const mark = () => row.classList.toggle('changed', +inp.value !== dflt);
     inp.oninput = () => { set(+inp.value); out.textContent = fmt(+inp.value) + unit; mark(); refresh(); const f = $('#filterSel'); if (f && cur()) f.value = filterName(cur().adj); };
     mark();
+    if (label === 'Zoom') inp.onchange = () => renderPanel(); // border background picker appears below 1×
     row.append(txt('span', '', label), inp, out);
     return row;
   }
@@ -1071,7 +1072,7 @@
     const fit = seg([['cover', 'Fill frame'], ['contain', 'Fit with border']], s.fit, (v) => { checkpoint(); s.fit = v; s.panX = s.panY = 0; renderAll(); });
     fit.style.marginTop = '10px';
     const photo = section('Photo', tools, fit);
-    if (s.fit === 'contain') {
+    if (s.fit === 'contain' || s.zoom < 1) {
       const bg = el('div', 'field');
       bg.style.marginTop = '12px';
       bg.append(txt('span', '', 'Border background'), bgPicker(s));
@@ -1092,7 +1093,7 @@
     frow.append(txt('span', '', 'Filter'), fsel);
     const adjust = section('Adjust',
       frow,
-      slider('Zoom', 1, 4, 0.01, () => s.zoom, (v) => (s.zoom = v), '×', 1),
+      slider('Zoom', 0.5, 4, 0.01, () => s.zoom, (v) => (s.zoom = v), '×', 1),
       slider('Brightness', 50, 150, 1, () => s.adj.brightness, (v) => (s.adj.brightness = v), '%', 100),
       slider('Contrast', 50, 150, 1, () => s.adj.contrast, (v) => (s.adj.contrast = v), '%', 100),
       slider('Saturation', 0, 200, 1, () => s.adj.saturation, (v) => (s.adj.saturation = v), '%', 100),
@@ -1126,14 +1127,14 @@
     const u = document.createElement('input');
     u.type = 'text'; u.value = state.username; u.placeholder = 'yourname';
     u.oninput = () => { state.username = u.value; syncPreviewText(); };
-    f.append(labeled('Username', u));
+    f.append(labeled('Username*', u));
     if (state.preview === 'feed') {
       const c = document.createElement('textarea');
       c.value = state.caption; c.rows = 3;
       c.oninput = () => { state.caption = c.value; syncPreviewText(); };
-      f.append(labeled('Caption', c));
+      f.append(labeled('Caption*', c));
     }
-    f.append(el('p', 'note', state.preview === 'grid' ? 'Instagram shows slide 1 on your profile, centre-cropped to 3:4. Preview only.' : 'Preview only. These are not exported.'));
+    f.append(el('p', 'note', state.preview === 'grid' ? 'Instagram shows slide 1 on your profile, centre-cropped to 3:4. *Preview only.' : '*Preview only. These are not exported.'));
     pane.append(pv.opts, pv.body, f);
     drawPreviewOpts();
     drawPreviewBody();
