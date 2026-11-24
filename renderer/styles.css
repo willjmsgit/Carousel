@@ -218,3 +218,4 @@ main.no-panel { grid-template-columns: 176px minmax(0, 1fr); }
 .preview::-webkit-scrollbar, .panel::-webkit-scrollbar, .strip::-webkit-scrollbar { display: none; }
 .icon-btn.sm { width: 26px; height: 26px; }
 .icon-btn.sm .ic { width: 15px; height: 15px; }
+.row select { width: auto; padding: 5px 8px; }

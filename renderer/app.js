@@ -246,6 +246,35 @@
     state.sel = Math.max(0, state.slides.findIndex((x) => x.id === id));
     renderAll();
   }
+  // Cut one photo into n slides that join up when swiped (a panorama). Each slide is the same photo at a shared
+  // scale, shifted so slide i shows the i-th n-th of the wide canvas.
+  function spreadSlide(n) {
+    const s = cur();
+    if (!s) return;
+    const a = A(s.asset);
+    if (a.blank) return;
+    if (state.slides.length - 1 + n > L.MAX_SLIDES) return toast(`Instagram allows ${L.MAX_SLIDES} slides per post`);
+    checkpoint();
+    if (state.ratio === 'auto') state.ratio = '4:5'; // an auto frame would follow the wide photo, so pick a normal one
+    const ar = frameInfo().frameAR;
+    const iar = L.naturalAR(a.w, a.h, s.rot);
+    const base = Math.max(ar / iar, 1);
+    const scale = Math.max((n * ar) / iar, 1);
+    const mx = Math.max(0, (iar * scale - ar) / 2);
+    const parts = [];
+    for (let i = 0; i < n; i++) {
+      const t = JSON.parse(JSON.stringify(s));
+      t.id = ++uid;
+      if (i) t.layers = [];
+      Object.assign(t, { fit: 'cover', zoom: scale / base, panX: mx ? L.clamp((((n - 1) / 2 - i) * ar) / mx, -1, 1) : 0, panY: 0 });
+      parts.push(t);
+    }
+    state.slides.splice(state.sel, 1, ...parts);
+    state.layer = null;
+    renderAll();
+    toast(`Spread across ${n} slides`, { label: 'Undo', fn: undo });
+  }
+
   function removeSlide(i) {
     if (!state.slides[i]) return;
     checkpoint();
@@ -788,7 +817,7 @@
       lastWheel = now;
       const hit = hitLayer(toNorm(e));
       if (hit) { state.layer = hit.id; setScale(hit, scaleOf(hit) * f); }
-      else if (!A(cur().asset).blank) cur().zoom = L.clamp(cur().zoom * f, 0.5, 4);
+      else if (!A(cur().asset).blank) cur().zoom = L.clamp(cur().zoom * f, 0.5, Math.max(4, Math.ceil(cur().zoom)));
       renderPanel();
       refresh();
     }, { passive: false });
@@ -1071,7 +1100,15 @@
     t('flip', 'Flip horizontally', () => { checkpoint(); s.flip = !s.flip; refresh(); });
     const fit = seg([['cover', 'Fill frame'], ['contain', 'Fit with border']], s.fit, (v) => { checkpoint(); s.fit = v; s.panX = s.panY = 0; renderAll(); });
     fit.style.marginTop = '10px';
-    const photo = section('Photo', tools, fit);
+    const room = L.MAX_SLIDES - state.slides.length + 1;
+    const nsel = document.createElement('select');
+    for (let n = 2; n <= Math.min(10, room); n++) nsel.append(new Option(String(n), String(n)));
+    const spread = el('div', 'row');
+    spread.style.marginTop = '10px';
+    const go = button('btn', 'Spread', 'Cut this photo into slides that join up when swiped', () => spreadSlide(+nsel.value));
+    go.disabled = room < 2;
+    spread.append(txt('span', 'muted', 'Spread across'), nsel, txt('span', 'muted', 'slides'), go);
+    const photo = section('Photo', tools, fit, spread);
     if (s.fit === 'contain' || s.zoom < 1) {
       const bg = el('div', 'field');
       bg.style.marginTop = '12px';
@@ -1093,7 +1130,7 @@
     frow.append(txt('span', '', 'Filter'), fsel);
     const adjust = section('Adjust',
       frow,
-      slider('Zoom', 0.5, 4, 0.01, () => s.zoom, (v) => (s.zoom = v), '×', 1),
+      slider('Zoom', 0.5, Math.max(4, Math.ceil(s.zoom)), 0.01, () => s.zoom, (v) => (s.zoom = v), '×', 1),
       slider('Brightness', 50, 150, 1, () => s.adj.brightness, (v) => (s.adj.brightness = v), '%', 100),
       slider('Contrast', 50, 150, 1, () => s.adj.contrast, (v) => (s.adj.contrast = v), '%', 100),
       slider('Saturation', 0, 200, 1, () => s.adj.saturation, (v) => (s.adj.saturation = v), '%', 100),
@@ -1385,6 +1422,6 @@
   });
 
   // test hook (used by the headless smoke test)
-  window.__ig = { state, assets, addFiles, addLayerFiles, addBlankSlide, addTextLayer, renderAll, moveSlide, placeOnto, undo, redo, pristine, frameInfo };
+  window.__ig = { spreadSlide, state, assets, addFiles, addLayerFiles, addBlankSlide, addTextLayer, renderAll, moveSlide, placeOnto, undo, redo, pristine, frameInfo };
   renderAll();
 })();
