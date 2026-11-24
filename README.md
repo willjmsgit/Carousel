@@ -15,7 +15,7 @@
 ### Build your carousel
 Add photos, drag to reorder, and preview the swipe flow as you work.
 
-<img src="docs/screenshots/editor.png" alt="Editor" width="80%">
+<img src="docs/screenshots/editor.png" alt="Editor" width="260">
 
 ### Gradient backgrounds
 Pick a gradient swatch to give every slide a consistent look.
