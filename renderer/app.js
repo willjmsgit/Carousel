@@ -83,7 +83,37 @@
   };
   const bgStops = (bg) => (BACKGROUNDS[bg.slice(2)] || BACKGROUNDS.ig).stops;
   const bgCss = (bg) => (bg.startsWith('g:') ? `linear-gradient(45deg, ${bgStops(bg).join(',')})` : bg);
-  function paintBg(ctx, bg, w, h) {
+  const BLUR_DEFAULT = 50;
+  // 'blur' = blurred, enlarged copy of the slide's own photo; 'i:<assetId>' = a custom image, cover-fitted.
+  function paintBg(ctx, bg, w, h, s, full) {
+    if (bg === 'blur' && s && A(s.asset) && !A(s.asset).blank) {
+      const a = A(s.asset), src = full ? a.img : a.proxy;
+      const sw = full ? a.w : src.width, sh = full ? a.h : src.height;
+      const rot = s.rot % 180;
+      const iw = rot ? sh : sw, ih = rot ? sw : sh;
+      const r = (w * (s.bgBlur ?? BLUR_DEFAULT)) / 1000;
+      const m = r * 3; // overdraw so the blur never fades out at the frame edges
+      const p = L.placeImage(iw, ih, w + 2 * m, h + 2 * m, 1, 0, 0, 'cover');
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+      ctx.save();
+      ctx.filter = `blur(${r}px) ${cssFilter(s.adj)}`;
+      ctx.translate(w / 2, h / 2);
+      ctx.rotate((s.rot * Math.PI) / 180);
+      if (s.flip) ctx.scale(-1, 1);
+      ctx.scale(p.scale, p.scale);
+      ctx.drawImage(src, -sw / 2, -sh / 2, sw, sh);
+      ctx.restore();
+      return;
+    }
+    if (bg.startsWith('i:') && A(+bg.slice(2))) {
+      const a = A(+bg.slice(2)), src = full ? a.img : a.proxy;
+      const sw = full ? a.w : src.width, sh = full ? a.h : src.height;
+      const k = Math.max(w / sw, h / sh);
+      ctx.drawImage(src, (w - sw * k) / 2, (h - sh * k) / 2, sw * k, sh * k);
+      return;
+    }
+    if (bg === 'blur' || bg.startsWith('i:')) bg = '#000000';
     if (bg.startsWith('g:')) {
       const st = bgStops(bg), gr = ctx.createLinearGradient(0, h, w, 0);
       st.forEach((c, i) => gr.addColorStop(i / (st.length - 1), c));
@@ -425,7 +455,8 @@
     canvas.height = th;
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingQuality = 'high';
-    paintBg(ctx, s.bg, tw, th);
+    const bgVisible = a.blank || s.fit === 'contain' || s.zoom < 1; // otherwise the photo hides it, so skip the blur work
+    paintBg(ctx, bgVisible ? s.bg : '#000000', tw, th, s, full);
     if (!a.blank) drawPhoto(s, a, ctx, tw, th, full);
     for (const ly of s.layers) drawLayer(ctx, ly, tw, th, full);
   }
@@ -817,7 +848,7 @@
       lastWheel = now;
       const hit = hitLayer(toNorm(e));
       if (hit) { state.layer = hit.id; setScale(hit, scaleOf(hit) * f); }
-      else if (!A(cur().asset).blank) cur().zoom = L.clamp(cur().zoom * f, 0.5, Math.max(4, Math.ceil(cur().zoom)));
+      else if (!A(cur().asset).blank) cur().zoom = L.clamp(cur().zoom * f, 0.25, Math.max(4, Math.ceil(cur().zoom)));
       renderPanel();
       refresh();
     }, { passive: false });
@@ -961,7 +992,7 @@
   function bgThumb(s) {
     const c = document.createElement('canvas');
     c.width = c.height = 72;
-    paintBg(c.getContext('2d'), s.bg, 72, 72);
+    paintBg(c.getContext('2d'), s.bg, 72, 72, s, false);
     return c;
   }
   function textThumb(ly) {
@@ -990,7 +1021,21 @@
     return r;
   }
 
-  function bgPicker(s) {
+  function pickBgImage(s) {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = 'image/*';
+    inp.onchange = async () => {
+      const [a] = await loadAssets([...inp.files].slice(0, 1));
+      if (!a) return;
+      checkpoint();
+      s.bg = 'i:' + a.id;
+      renderPanel();
+      refresh();
+    };
+    inp.click();
+  }
+  function bgPicker(s, withBlur) {
     const box = el('div');
     const sw = el('div', 'swatches');
     const add = (val, title) => {
@@ -1001,13 +1046,65 @@
     add('#000000', 'Black');
     add('#ffffff', 'White');
     Object.entries(BACKGROUNDS).forEach(([k, v]) => add('g:' + k, v.name));
+    if (withBlur) {
+      const b = button('sw sw-blur' + (s.bg === 'blur' ? ' on' : ''), '', 'Blurred copy of this photo', () => { checkpoint(); s.bg = 'blur'; renderPanel(); refresh(); });
+      b.append(thumb(A(s.asset)));
+      sw.append(b);
+    }
+    const hasImg = s.bg.startsWith('i:') && A(+s.bg.slice(2));
+    const img = button('sw sw-img' + (hasImg ? ' on' : ''), hasImg ? '' : ic('plus'), hasImg ? 'Custom image (click to change)' : 'Custom image…', () => pickBgImage(s));
+    if (hasImg) img.append(thumb(A(+s.bg.slice(2))));
+    sw.append(img);
     const col = document.createElement('input');
-    col.type = 'color'; col.value = s.bg.startsWith('g:') ? '#000000' : s.bg; col.title = 'Custom colour';
+    col.type = 'color'; col.value = /^#[0-9a-f]{6}$/i.test(s.bg) ? s.bg : '#000000'; col.title = 'Custom colour';
     col.onfocus = checkpoint;
     col.oninput = () => { s.bg = col.value; refresh(); };
     sw.append(col);
     box.append(sw);
+    if (withBlur && s.bg === 'blur') box.append(slider('Blur', 0, 100, 1, () => s.bgBlur ?? BLUR_DEFAULT, (v) => (s.bgBlur = v), '', BLUR_DEFAULT));
     return box;
+  }
+
+  let spreadN = 3;
+  function spreadSection(s) {
+    const room = L.MAX_SLIDES - state.slides.length + 1;
+    const max = Math.min(10, room);
+    const sec = section('Spread across slides', el('p', 'note', 'Cut one wide photo into slides that join up seamlessly when swiped. Dashed lines show where each slide ends.'));
+    if (max < 2) { sec.append(el('p', 'note', `Not enough room: Instagram allows ${L.MAX_SLIDES} slides per post.`)); return sec; }
+    spreadN = L.clamp(spreadN, 2, max);
+    const ar = state.ratio === 'auto' ? 4 / 5 : frameInfo().frameAR; // same frame spreadSlide will use
+    const prev = document.createElement('canvas');
+    prev.className = 'spread-prev';
+    const draw = () => {
+      const n = spreadN, W = 560, H = Math.max(40, Math.round(W / (n * ar)));
+      renderSlide({ ...s, zoom: 1, panX: 0, panY: 0, fit: 'cover', layers: [] }, prev, W, H, false);
+      const c = prev.getContext('2d');
+      c.save();
+      c.setLineDash([6, 5]);
+      c.lineWidth = 2;
+      c.strokeStyle = '#fff';
+      c.shadowColor = 'rgba(0,0,0,.7)';
+      c.shadowBlur = 4;
+      for (let i = 1; i < n; i++) { c.beginPath(); c.moveTo((i * W) / n, 0); c.lineTo((i * W) / n, H); c.stroke(); }
+      c.setLineDash([]);
+      c.font = '600 14px sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'top';
+      c.fillStyle = '#fff';
+      if (H >= 28) for (let i = 0; i < n; i++) c.fillText(String(i + 1), ((i + 0.5) * W) / n, 6);
+      c.restore();
+    };
+    draw();
+    const nsel = document.createElement('select');
+    for (let n = 2; n <= max; n++) nsel.append(new Option(String(n), String(n)));
+    nsel.value = String(spreadN);
+    nsel.onchange = () => { spreadN = +nsel.value; draw(); };
+    const go = button('btn', 'Spread', 'Replace this slide with slides that join up when swiped', () => spreadSlide(spreadN));
+    const row = el('div', 'row');
+    row.style.marginTop = '10px';
+    row.append(txt('span', 'muted', 'Spread across'), nsel, txt('span', 'muted', 'slides'), go);
+    sec.append(prev, row);
+    return sec;
   }
 
   function panelImageLayer(p, ly) {
@@ -1089,7 +1186,7 @@
     if (ly) return isText(ly) ? panelText(p, ly) : panelImageLayer(p, ly);
 
     if (a0.blank) {
-      p.append(section('Background', bgPicker(s), el('p', 'note', 'Gradients are close to Instagram’s own. Instagram doesn’t publish the exact colours.')));
+      p.append(section('Background', bgPicker(s, false), el('p', 'note', 'Gradients are close to Instagram’s own. Instagram doesn’t publish the exact colours.')));
       return;
     }
 
@@ -1100,23 +1197,15 @@
     t('flip', 'Flip horizontally', () => { checkpoint(); s.flip = !s.flip; refresh(); });
     const fit = seg([['cover', 'Fill frame'], ['contain', 'Fit with border']], s.fit, (v) => { checkpoint(); s.fit = v; s.panX = s.panY = 0; renderAll(); });
     fit.style.marginTop = '10px';
-    const room = L.MAX_SLIDES - state.slides.length + 1;
-    const nsel = document.createElement('select');
-    for (let n = 2; n <= Math.min(10, room); n++) nsel.append(new Option(String(n), String(n)));
-    const spread = el('div', 'row');
-    spread.style.marginTop = '10px';
-    const go = button('btn', 'Spread', 'Cut this photo into slides that join up when swiped', () => spreadSlide(+nsel.value));
-    go.disabled = room < 2;
-    spread.append(txt('span', 'muted', 'Spread across'), nsel, txt('span', 'muted', 'slides'), go);
-    const photo = section('Photo', tools, fit, spread);
+    const photo = section('Photo', tools, fit);
     if (s.fit === 'contain' || s.zoom < 1) {
       const bg = el('div', 'field');
       bg.style.marginTop = '12px';
-      bg.append(txt('span', '', 'Border background'), bgPicker(s));
+      bg.append(txt('span', '', 'Border background'), bgPicker(s, true));
       photo.append(bg);
     }
     photo.append(el('p', 'note', 'Drag the photo to reposition it, scroll to zoom, drag middle mouse to pan'));
-    p.append(photo);
+    p.append(photo, spreadSection(s));
 
     const fsel = document.createElement('select');
     fsel.id = 'filterSel';
@@ -1130,7 +1219,7 @@
     frow.append(txt('span', '', 'Filter'), fsel);
     const adjust = section('Adjust',
       frow,
-      slider('Zoom', 0.5, Math.max(4, Math.ceil(s.zoom)), 0.01, () => s.zoom, (v) => (s.zoom = v), '×', 1),
+      slider('Zoom', 0.25, Math.max(4, Math.ceil(s.zoom)), 0.01, () => s.zoom, (v) => (s.zoom = v), '×', 1),
       slider('Brightness', 50, 150, 1, () => s.adj.brightness, (v) => (s.adj.brightness = v), '%', 100),
       slider('Contrast', 50, 150, 1, () => s.adj.contrast, (v) => (s.adj.contrast = v), '%', 100),
       slider('Saturation', 0, 200, 1, () => s.adj.saturation, (v) => (s.adj.saturation = v), '%', 100),

@@ -219,3 +219,9 @@ main.no-panel { grid-template-columns: 176px minmax(0, 1fr); }
 .icon-btn.sm { width: 26px; height: 26px; }
 .icon-btn.sm .ic { width: 15px; height: 15px; }
 .row select { width: auto; padding: 5px 8px; }
+
+.sw-blur, .sw-img { position: relative; overflow: hidden; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.sw-blur canvas, .sw-img canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.sw-blur canvas { filter: blur(3px); transform: scale(1.4); }
+.sw-img svg { width: 14px; height: 14px; }
+.spread-prev { display: block; width: 100%; border-radius: 6px; border: 1px solid var(--line); background: #000; }
