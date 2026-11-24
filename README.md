@@ -1,6 +1,8 @@
-# IG Post Preview
+<p align="center">
+  <img src="docs/banner.svg" alt="Carousel Studio" width="100%">
+</p>
 
-Electron app: load photos, edit them, layer photos and text, reorder, and preview them live as an Instagram carousel and on the profile grid.
+Load photos, edit them, layer photos and text, reorder, and preview them live as an Instagram carousel and on the profile grid.
 
 ## Run
 
