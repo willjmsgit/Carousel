@@ -1,6 +1,6 @@
 {
   "name": "carousel",
-  "version": "0.2.0",
+  "version": "1.0.1",
   "description": "Edit, layer, reorder and preview images as they will appear in an Instagram carousel post",
   "main": "main.js",
   "scripts": {
