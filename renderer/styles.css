@@ -210,3 +210,9 @@ main.no-panel { grid-template-columns: 176px minmax(0, 1fr); }
 .card h2 { font-size: 18px; }
 .card ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
 .card .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+
+/* hidden scrollbars (panes still scroll) */
+.preview, .panel, .strip { scrollbar-width: none; }
+.preview::-webkit-scrollbar, .panel::-webkit-scrollbar, .strip::-webkit-scrollbar { display: none; }
+.icon-btn.sm { width: 26px; height: 26px; }
+.icon-btn.sm .ic { width: 15px; height: 15px; }

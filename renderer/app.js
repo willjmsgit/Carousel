@@ -1078,13 +1078,21 @@
     photo.append(el('p', 'note', 'Drag the photo to reposition it, scroll to zoom. The faded area outside the frame is what gets cropped.'));
     p.append(photo);
 
-    p.append(section('Adjust',
+    const adjust = section('Adjust',
       slider('Zoom', 1, 4, 0.01, () => s.zoom, (v) => (s.zoom = v), '×', 1),
       slider('Brightness', 50, 150, 1, () => s.adj.brightness, (v) => (s.adj.brightness = v), '%', 100),
       slider('Contrast', 50, 150, 1, () => s.adj.contrast, (v) => (s.adj.contrast = v), '%', 100),
       slider('Saturation', 0, 200, 1, () => s.adj.saturation, (v) => (s.adj.saturation = v), '%', 100),
       slider('Warmth', -100, 100, 1, () => s.adj.warmth, (v) => (s.adj.warmth = v), '', 0),
-      el('p', 'note', 'Double-click a slider to reset it.')));
+      el('p', 'note', 'Double-click a slider to reset it.'));
+    adjust.querySelector('.sec-head').append(button('icon-btn sm', ic('rotL'), 'Reset zoom and adjustments', () => {
+      checkpoint();
+      s.zoom = 1;
+      s.adj = DEFAULT_ADJ();
+      renderPanel();
+      refresh();
+    }));
+    p.append(adjust);
 
     const chips = el('div', 'row');
     Object.entries(FILTERS).forEach(([name, vals]) => chips.append(button('chip', name, null, () => { checkpoint(); s.adj = Object.assign(DEFAULT_ADJ(), vals); renderPanel(); refresh(); })));
@@ -1257,11 +1265,9 @@
 
   $('#undo').innerHTML = ic('undo');
   $('#redo').innerHTML = ic('redo');
-  $('#add').innerHTML = `${ic('plus')} Add photos`;
   $('#export').innerHTML = `${ic('download')} Export`;
   $('#undo').onclick = undo;
   $('#redo').onclick = redo;
-  $('#add').onclick = () => $('#file').click();
   $('#export').onclick = openExport;
   $('#togglePanel').innerHTML = ic('sidebar');
   $('#togglePanel').onclick = () => setPanel(!state.panel);
