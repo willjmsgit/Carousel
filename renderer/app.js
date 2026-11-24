@@ -28,6 +28,7 @@
     heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/>',
     comment: '<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l2-5.2A8.4 8.4 0 1 1 21 11.5z"/>',
     send: '<path d="m22 2-7 20-4-9-9-4 20-7z"/><path d="M22 2 11 13"/>',
+    type: '<path d="M4 7V4h16v3M9 20h6M12 4v16"/>',
     bookmark: '<path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
   };
   const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
@@ -52,11 +53,42 @@
     Sepia: { sepia: 70 },
   };
 
+  const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+  // Instagram's own typeface is not licensed for other apps, so these use system fonts (Segoe UI on Windows).
+  const TEXT_STYLES = {
+    classic: { name: 'Classic', font: (px) => `700 ${px}px ${SANS}` },
+    modern: { name: 'Modern', font: (px) => `400 ${px}px ${SANS}`, ls: 0.04 },
+    neon: { name: 'Neon', font: (px) => `600 ${px}px ${SANS}`, glow: true },
+    typewriter: { name: 'Typewriter', font: (px) => `500 ${px}px "Courier New", Courier, monospace` },
+    strong: { name: 'Strong', font: (px) => `900 ${px}px Impact, "Arial Black", ${SANS}`, upper: true },
+  };
+  const TEXT_COLORS = ['#ffffff', '#000000', '#ed4956', '#ff8a00', '#ffd600', '#00c853', '#0095f6', '#8a3ab9'];
+  // Close to Instagram's gradients (the logo and the story backgrounds). Instagram doesn't publish exact values.
+  const BACKGROUNDS = {
+    ig: { name: 'Instagram', stops: ['#feda75', '#fa7e1e', '#d62976', '#962fbf', '#4f5bd5'] },
+    sunset: { name: 'Sunset', stops: ['#f9ce34', '#ee2a7b', '#6228d7'] },
+    ocean: { name: 'Ocean', stops: ['#00c6ff', '#0072ff'] },
+    mint: { name: 'Mint', stops: ['#11998e', '#38ef7d'] },
+    peach: { name: 'Peach', stops: ['#ffecd2', '#fcb69f'] },
+    night: { name: 'Night', stops: ['#0f0c29', '#302b63', '#24243e'] },
+  };
+  const bgStops = (bg) => (BACKGROUNDS[bg.slice(2)] || BACKGROUNDS.ig).stops;
+  const bgCss = (bg) => (bg.startsWith('g:') ? `linear-gradient(45deg, ${bgStops(bg).join(',')})` : bg);
+  function paintBg(ctx, bg, w, h) {
+    if (bg.startsWith('g:')) {
+      const st = bgStops(bg), gr = ctx.createLinearGradient(0, h, w, 0);
+      st.forEach((c, i) => gr.addColorStop(i / (st.length - 1), c));
+      ctx.fillStyle = gr;
+    } else ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, w, h);
+  }
+  const isLight = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 150; };
+
   const state = {
     slides: [], // [{ id, asset, rot, flip, zoom, panX, panY, fit, bg, adj, gridOff, layers: [{ id, asset, cx, cy, w, rot, flip, opacity }] }]
     sel: 0,
     layer: null, // selected layer id on the selected slide; null = the background photo
-    view: 'edit', // edit | feed | grid
+    preview: 'feed', // off | feed | grid: live preview beside the editor
     ratio: 'auto',
     mode: 'match',
     theme: 'light',
@@ -71,7 +103,7 @@
   const cur = () => state.slides[state.sel];
   const curLayer = () => { const s = cur(); return s && state.layer != null ? s.layers.find((l) => l.id === state.layer) || null : null; };
   let uid = 0, lastSig = '', toastTimer, dragIdx = null, ed = null, feed = null;
-  const view = { z: 1, x: 0, y: 0 }; // Edit-view zoom/pan (screen only, never exported)
+  const cam = { z: 1, x: 0, y: 0 }; // Edit-view zoom/pan (screen only, never exported)
   let space = false, vp = null, viewTimer;
 
   // ---------- undo / redo (slides + layers only; originals stay in `assets`) ----------
@@ -135,6 +167,34 @@
     return { id: ++uid, asset: a.id, cx: L.clamp(x, 0, 1), cy: L.clamp(y, 0, 1), w, rot: 0, flip: false, opacity: 1 };
   }
 
+  const makeText = (x = 0.5, y = 0.5) => ({ id: ++uid, kind: 'text', text: 'Your text', style: 'classic', color: '#ffffff', size: 0.09, align: 'center', fill: false, cx: x, cy: y, rot: 0, opacity: 1 });
+  function focusText() { const t = $('#panel textarea'); if (t) { t.focus(); t.select(); } }
+  function addTextLayer() {
+    const s = cur();
+    if (!s) return;
+    checkpoint();
+    const ly = makeText();
+    s.layers.push(ly);
+    state.layer = ly.id;
+    renderAll();
+    focusText();
+  }
+  function addBlankSlide() {
+    if (state.slides.length >= L.MAX_SLIDES) return toast(`Instagram allows ${L.MAX_SLIDES} slides per post`);
+    checkpoint();
+    const a = { id: ++uid, name: 'text-slide', blank: true, w: 1080, h: 1350 };
+    assets.set(a.id, a);
+    const s = newSlide(a);
+    s.bg = 'g:ig';
+    const ly = makeText();
+    s.layers.push(ly);
+    state.slides.push(s);
+    state.sel = state.slides.length - 1;
+    state.layer = ly.id;
+    renderAll();
+    focusText();
+  }
+
   const imageFiles = (list) => [...list].filter((f) => f.type.startsWith('image/'));
 
   async function addFiles(list) {
@@ -166,7 +226,6 @@
     loaded.forEach((a, k) => { ly = makeLayer(a, s, (at ? at.x : 0.5) + k * 0.04, (at ? at.y : 0.5) + k * 0.04); s.layers.push(ly); });
     state.sel = state.slides.indexOf(s);
     state.layer = ly.id;
-    state.view = 'edit';
     renderAll();
   }
 
@@ -222,13 +281,13 @@
     const src = state.slides[srcIdx], dst = state.slides[dstIdx];
     if (!src || !dst) return;
     if (src === dst) return toast('Drop it on a different slide');
+    if (A(src.asset).blank) return toast('A blank slide has no photo to place. Drag a photo slide instead.');
     checkpoint();
     const ly = makeLayer(A(src.asset), dst, at ? at.x : 0.5, at ? at.y : 0.5);
     dst.layers.push(ly);
     if (!copy) state.slides.splice(srcIdx, 1);
     state.sel = state.slides.indexOf(dst);
     state.layer = ly.id;
-    state.view = 'edit';
     renderAll();
     toast(copy ? 'Placed a copy on the slide' : 'Placed on the slide. The original slide was removed.', { label: 'Undo', fn: undo });
   }
@@ -236,7 +295,57 @@
   // ---------- drawing ----------
   const cssFilter = (a) => `brightness(${a.brightness}%) contrast(${a.contrast}%) saturate(${a.saturation}%) grayscale(${a.grayscale}%) sepia(${a.sepia}%)`;
 
+  const isText = (ly) => ly.kind === 'text';
+  const scaleOf = (ly) => (isText(ly) ? ly.size : ly.w);
+  const setScale = (ly, v) => { if (isText(ly)) ly.size = L.clamp(v, 0.02, 0.5); else ly.w = L.clamp(v, 0.03, 3); };
+  const mctx = document.createElement('canvas').getContext('2d');
+  // Size of a text layer's box when the frame is tw px wide. Everything scales with tw.
+  function textBox(ly, tw) {
+    const st = TEXT_STYLES[ly.style] || TEXT_STYLES.classic;
+    const px = Math.max(2, ly.size * tw);
+    mctx.font = st.font(px);
+    mctx.letterSpacing = st.ls ? `${(st.ls * px).toFixed(2)}px` : '0px';
+    const lines = (st.upper ? ly.text.toUpperCase() : ly.text).split('\n');
+    const widest = Math.max(...lines.map((l) => mctx.measureText(l || ' ').width));
+    const lh = px * 1.2, padX = ly.fill ? px * 0.4 : 0, padY = ly.fill ? px * 0.2 : 0;
+    return { st, px, lines, lh, padX, padY, w: Math.max(px * 0.6, widest) + padX * 2, h: lh * lines.length + padY * 2 };
+  }
+  function drawText(ctx, ly, tw, th) {
+    const b = textBox(ly, tw);
+    ctx.save();
+    ctx.globalAlpha = ly.opacity;
+    ctx.translate(ly.cx * tw, ly.cy * th);
+    ctx.rotate((ly.rot * Math.PI) / 180);
+    ctx.font = b.st.font(b.px);
+    ctx.letterSpacing = mctx.letterSpacing;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = ly.align;
+    let ink = ly.color;
+    if (ly.fill) {
+      ctx.fillStyle = ly.color;
+      ctx.beginPath();
+      ctx.roundRect(-b.w / 2, -b.h / 2, b.w, b.h, b.px * 0.3);
+      ctx.fill();
+      ink = isLight(ly.color) ? '#000000' : '#ffffff';
+    }
+    const x = ly.align === 'left' ? -b.w / 2 + b.padX : ly.align === 'right' ? b.w / 2 - b.padX : 0;
+    const lines = () => b.lines.forEach((t, k) => ctx.fillText(t, x, -b.h / 2 + b.padY + b.lh * (k + 0.5)));
+    if (b.st.glow && !ly.fill) {
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = ly.color;
+      ctx.shadowBlur = b.px * 0.5; lines();
+      ctx.shadowBlur = b.px * 0.15; lines();
+    } else { ctx.fillStyle = ink; lines(); }
+    ctx.restore();
+  }
+  function layerBox(ly, W) {
+    if (isText(ly)) { const b = textBox(ly, W); return { w: b.w, h: b.h }; }
+    const a = A(ly.asset), w = ly.w * W;
+    return { w, h: (w * a.h) / a.w };
+  }
+
   function drawLayer(ctx, ly, tw, th, full) {
+    if (isText(ly)) return drawText(ctx, ly, tw, th);
     const a = A(ly.asset);
     const src = full ? a.img : a.proxy;
     const w = ly.w * tw, h = (w * a.h) / a.w;
@@ -250,14 +359,7 @@
     ctx.restore();
   }
 
-  function renderSlide(s, canvas, tw, th, full) {
-    const a = A(s.asset);
-    canvas.width = tw;
-    canvas.height = th;
-    const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingQuality = 'high';
-    ctx.fillStyle = s.bg;
-    ctx.fillRect(0, 0, tw, th);
+  function drawPhoto(s, a, ctx, tw, th, full) {
     const src = full ? a.img : a.proxy;
     const sw = full ? a.w : src.width, sh = full ? a.h : src.height;
     const { iw, ih } = s.rot % 180 ? { iw: sh, ih: sw } : { iw: sw, ih: sh };
@@ -278,6 +380,16 @@
       ctx.fillRect(0, 0, tw, th);
       ctx.restore();
     }
+  }
+
+  function renderSlide(s, canvas, tw, th, full) {
+    const a = A(s.asset);
+    canvas.width = tw;
+    canvas.height = th;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    paintBg(ctx, s.bg, tw, th);
+    if (!a.blank) drawPhoto(s, a, ctx, tw, th, full);
     for (const ly of s.layers) drawLayer(ctx, ly, tw, th, full);
   }
 
@@ -300,6 +412,7 @@
     if (JSON.stringify(frameInfo()) !== lastSig) return renderAll();
     paintThumb(state.sel);
     paintEdit();
+    paintPreview();
   }
 
   function updateTop() {
@@ -307,9 +420,17 @@
     $('#redo').disabled = !fut.length;
     $('#export').disabled = !state.slides.length;
     document.querySelectorAll('#views button').forEach((b) => {
-      b.classList.toggle('on', b.dataset.view === state.view);
+      b.classList.toggle('on', b.dataset.view === state.preview);
       b.disabled = !state.slides.length;
     });
+  }
+
+  function toggle(label, on, fn, title) {
+    const b = button('switch' + (on ? ' on' : ''), `<i></i><span>${label}</span>`, title, null);
+    b.setAttribute('role', 'switch');
+    b.setAttribute('aria-checked', String(on));
+    b.onclick = () => { const v = !b.classList.contains('on'); b.classList.toggle('on', v); b.setAttribute('aria-checked', String(v)); fn(v); };
+    return b;
   }
 
   function seg(options, value, onPick) {
@@ -342,9 +463,7 @@
       : val === 'first' ? `Every slide is cropped to slide 1’s shape (${nm}).` : `Every slide is cropped to ${nm}.`;
     const g2 = txt('span', 'muted hint', hint);
     b.append(g1, g2, el('span', 'spacer'));
-    if (state.view === 'edit') {
-      b.append(button('chip' + (state.showCrop ? ' on' : ''), 'Profile crop guides', 'Shade the parts of slide 1 that the profile grid crops away', () => { state.showCrop = !state.showCrop; renderBar(); paintEdit(); }));
-    }
+    b.append(toggle('Profile crop guides', state.showCrop, (v) => { state.showCrop = v; paintEdit(); }, 'Shade the parts of slide 1 that the profile grid crops away'));
   }
 
   // ----- slide rail -----
@@ -413,32 +532,46 @@
       });
       strip.append(it);
     });
-    strip.append(button('add-tile', `${ic('plus')}<span>Add photos</span>`, 'Add photos', () => $('#file').click()));
+    strip.append(button('add-tile', `${ic('plus')}<span>Add photos</span>`, 'Add photos', () => $('#file').click()), button('add-tile', `${ic('type')}<span>Blank slide</span>`, 'Add a blank slide with a background and text', addBlankSlide));
   }
 
   function select(i) {
     state.sel = L.clamp(i, 0, state.slides.length - 1);
     state.layer = null;
     markStrip();
-    if (state.view === 'feed') goTo(state.sel); else renderStage();
+    renderEdit();
+    if (feed) goTo(state.sel);
     renderPanel();
   }
 
-  // ----- stage -----
+  // ----- stage: editor on the left, optional live preview on the right -----
   function renderStage() {
     const st = $('#stage');
     st.innerHTML = '';
     ed = null;
     feed = null;
+    gridTiles = null;
     if (!state.slides.length) return emptyState(st);
-    if (state.view === 'edit') buildEdit(st);
-    else if (state.view === 'feed') buildFeed(st);
-    else buildGrid(st);
+    buildEdit(st);
+    if (state.preview !== 'off') {
+      const pane = el('aside', 'preview');
+      st.append(pane);
+      buildPreview(pane);
+    }
+  }
+  function renderEdit() {
+    if (!ed) return renderStage();
+    ed.holder.remove();
+    ed = null;
+    buildEdit($('#stage'));
   }
 
   function emptyState(st) {
-    const d = el('div', 'empty', `<div class="ring">${ic('image')}</div><h2>Drop photos to start a post</h2><p>Reorder them, layer one photo on top of another, and preview the feed and your profile grid.</p>`);
-    d.append(button('btn primary', 'Choose photos', null, () => $('#file').click()));
+    const d = el('div', 'empty', `<div class="ring">${ic('image')}</div><h2>Drop photos to start a post</h2><p>Reorder them, layer photos and text on top, and watch the feed and your profile grid update as you edit.</p>`);
+    const row = el('div', 'row');
+    row.style.justifyContent = 'center';
+    row.append(button('btn primary', 'Choose photos', null, () => $('#file').click()), button('btn', 'Start with a blank slide', null, addBlankSlide));
+    d.append(row);
     st.append(d);
   }
 
@@ -451,12 +584,11 @@
     const s = cur();
     const W = ed.wrap.clientWidth, H = ed.wrap.clientHeight;
     for (let k = s.layers.length - 1; k >= 0; k--) {
-      const ly = s.layers[k], a = A(ly.asset);
+      const ly = s.layers[k], bx = layerBox(ly, W);
       const dx = (pt.x - ly.cx) * W, dy = (pt.y - ly.cy) * H;
       const t = (-ly.rot * Math.PI) / 180;
       const lx = dx * Math.cos(t) - dy * Math.sin(t), lyy = dx * Math.sin(t) + dy * Math.cos(t);
-      const hw = (ly.w * W) / 2, hh = (hw * a.h) / a.w;
-      if (Math.abs(lx) <= hw && Math.abs(lyy) <= hh) return ly;
+      if (Math.abs(lx) <= bx.w / 2 && Math.abs(lyy) <= bx.h / 2) return ly;
     }
     return null;
   }
@@ -474,27 +606,27 @@
 
   function applyView() {
     if (!ed) return;
-    const off = view.z === 1 && !view.x && !view.y;
-    ed.wrap.style.setProperty('--z', view.z);
-    ed.wrap.style.transform = off ? '' : `translate(${view.x}px, ${view.y}px) scale(${view.z})`;
+    const off = cam.z === 1 && !cam.x && !cam.y;
+    ed.wrap.style.setProperty('--z', cam.z);
+    ed.wrap.style.transform = off ? '' : `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`;
     ed.badge.hidden = off;
-    ed.badge.textContent = `${Math.round(view.z * 100)}%`;
+    ed.badge.textContent = `${Math.round(cam.z * 100)}%`;
   }
-  function resetView() { view.z = 1; view.x = view.y = 0; applyView(); paintEdit(); }
+  function resetView() { cam.z = 1; cam.x = cam.y = 0; applyView(); paintEdit(); }
   function zoomView(f, mx, my) {
     if (!ed) return;
-    let z = L.clamp(view.z * f, 0.5, 8);
+    let z = L.clamp(cam.z * f, 0.5, 8);
     if (Math.abs(z - 1) < 0.03) z = 1;
-    if (z === view.z) return;
+    if (z === cam.z) return;
     const r = ed.wrap.getBoundingClientRect();
     const rcx = r.left + r.width / 2, rcy = r.top + r.height / 2; // centre on screen
-    if (z === 1) { view.x = view.y = 0; }
+    if (z === 1) { cam.x = cam.y = 0; }
     else {
       // keep the point under the cursor fixed while scaling
-      view.x = mx - (rcx - view.x) - (z / view.z) * (mx - rcx);
-      view.y = my - (rcy - view.y) - (z / view.z) * (my - rcy);
+      cam.x = mx - (rcx - cam.x) - (z / cam.z) * (mx - rcx);
+      cam.y = my - (rcy - cam.y) - (z / cam.z) * (my - rcy);
     }
-    view.z = z;
+    cam.z = z;
     applyView();
     clearTimeout(viewTimer);
     viewTimer = setTimeout(paintEdit, 120); // re-render sharper once zooming settles
@@ -507,7 +639,7 @@
     const ar = frameInfo().slideARs[state.sel];
     const W = ed.wrap.clientWidth, H = ed.wrap.clientHeight;
     if (!W) return;
-    const pw = Math.min(view.z > 1 ? 3600 : 1800, Math.round(W * (window.devicePixelRatio || 1) * Math.max(1, view.z)));
+    const pw = Math.min(cam.z > 1 ? 3600 : 1800, Math.round(W * (window.devicePixelRatio || 1) * Math.max(1, cam.z)));
     renderSlide(s, ed.canvas, pw, Math.round(pw / ar), false);
 
     // Faded copy of the whole photo behind the frame, so you can see what the crop cuts away.
@@ -515,7 +647,7 @@
     const iw = s.rot % 180 ? a.h : a.w, ih = s.rot % 180 ? a.w : a.h;
     const pl = L.placeImage(iw, ih, W, H, s.zoom, s.panX, s.panY, s.fit);
     const dw = iw * pl.scale, dh = ih * pl.scale;
-    if (dw > W + 1 || dh > H + 1) {
+    if (!a.blank && (dw > W + 1 || dh > H + 1)) {
       const gw = Math.min(1400, Math.round(dw * (window.devicePixelRatio || 1)));
       renderSlide({ ...s, zoom: 1, panX: 0, panY: 0, fit: 'cover', layers: [] }, ed.ghost, gw, Math.max(1, Math.round((gw * dh) / dw)), false);
       Object.assign(ed.ghost.style, { display: 'block', left: `${pl.cx - dw / 2}px`, top: `${pl.cy - dh / 2}px`, width: `${dw}px`, height: `${dh}px` });
@@ -534,17 +666,16 @@
 
     const ly = curLayer();
     if (!ly) { ed.box.style.display = 'none'; return; }
-    const la = A(ly.asset);
-    const bw = ly.w * W;
+    const bx = layerBox(ly, W);
     Object.assign(ed.box.style, {
-      display: 'block', width: `${bw}px`, height: `${(bw * la.h) / la.w}px`,
-      left: `${ly.cx * W - bw / 2}px`, top: `${ly.cy * H - (bw * la.h) / la.w / 2}px`,
+      display: 'block', width: `${bx.w}px`, height: `${bx.h}px`,
+      left: `${ly.cx * W - bx.w / 2}px`, top: `${ly.cy * H - bx.h / 2}px`,
       transform: `rotate(${ly.rot}deg)`,
     });
   }
 
   let g = null, raf = 0, lastWheel = 0;
-  const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintEdit(); paintThumb(state.sel); }); };
+  const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paintEdit(); paintThumb(state.sel); paintPreview(); }); };
 
   function buildEdit(st) {
     const holder = el('div', 'edit-holder');
@@ -558,7 +689,7 @@
     ghost.className = 'ghost';
     wrap.append(ghost, canvas, crop, box);
     holder.append(wrap);
-    st.append(holder);
+    st.prepend(holder);
     const badge = button('zoom-badge', '100%', 'Reset zoom (Ctrl+0)', resetView);
     holder.append(badge);
     ed = { holder, wrap, canvas, ghost, crop, box, badge };
@@ -573,7 +704,7 @@
       const cx = r.left + ly.cx * r.width, cy = r.top + ly.cy * r.height;
       g = { sx: e.clientX, sy: e.clientY, moved: false, ly, cx, cy };
       if (h.classList.contains('rot')) Object.assign(g, { type: 'rotate', a0: Math.atan2(e.clientY - cy, e.clientX - cx), r0: ly.rot });
-      else Object.assign(g, { type: 'scale', d0: Math.hypot(e.clientX - cx, e.clientY - cy) || 1, w0: ly.w });
+      else Object.assign(g, { type: 'scale', d0: Math.hypot(e.clientX - cx, e.clientY - cy) || 1, w0: scaleOf(ly) });
       h.setPointerCapture(e.pointerId);
     });
 
@@ -586,6 +717,7 @@
         g = { type: 'move', ly: hit };
       } else {
         if (state.layer != null) { state.layer = null; renderPanel(); paintEdit(); }
+        if (A(cur().asset).blank) return;
         g = { type: 'pan' };
       }
       Object.assign(g, { sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, moved: false });
@@ -611,7 +743,7 @@
         if (pl.mx > 0) s.panX = L.clamp(s.panX + (e.clientX - g.x) / pl.mx, -1, 1);
         if (pl.my > 0) s.panY = L.clamp(s.panY + (e.clientY - g.y) / pl.my, -1, 1);
       } else if (g.type === 'scale') {
-        g.ly.w = L.clamp((g.w0 * Math.hypot(e.clientX - g.cx, e.clientY - g.cy)) / g.d0, 0.03, 3);
+        setScale(g.ly, (g.w0 * Math.hypot(e.clientX - g.cx, e.clientY - g.cy)) / g.d0);
       } else if (g.type === 'rotate') {
         let rot = g.r0 + ((Math.atan2(e.clientY - g.cy, e.clientX - g.cx) - g.a0) * 180) / Math.PI;
         rot = ((((rot + 180) % 360) + 360) % 360) - 180;
@@ -633,11 +765,13 @@
       if (now - lastWheel > 500) checkpoint();
       lastWheel = now;
       const hit = hitLayer(toNorm(e));
-      if (hit) { state.layer = hit.id; hit.w = L.clamp(hit.w * f, 0.03, 3); }
-      else cur().zoom = L.clamp(cur().zoom * f, 1, 4);
+      if (hit) { state.layer = hit.id; setScale(hit, scaleOf(hit) * f); }
+      else if (!A(cur().asset).blank) cur().zoom = L.clamp(cur().zoom * f, 1, 4);
       renderPanel();
       refresh();
     }, { passive: false });
+
+    wrap.addEventListener('dblclick', (e) => { const hit = hitLayer(toNorm(e)); if (hit && isText(hit)) focusText(); });
 
     layoutEdit();
   }
@@ -710,6 +844,7 @@
     const tileAR = state.gridShape === 'new' ? L.GRID_AR : 1;
     const list = state.gridFill === 'each' ? state.slides.map((s, i) => [s, i]) : [[state.slides[0], 0]];
     const total = state.gridFill === 'each' ? Math.ceil(list.length / 3) * 3 : 9;
+    gridTiles = [];
     const host = el('div', `profile ${state.theme}`);
     const hd = el('div', 'p-head', `<div class="av"><i></i></div><div><div class="un"></div><div class="stats"><span><b>${list.length}</b> posts</span><span><b>1,234</b> followers</span><span><b>321</b> following</span></div></div>`);
     hd.querySelector('.un').textContent = state.username || 'yourname';
@@ -720,7 +855,6 @@
       const [s, i] = list[k];
       const ar = info.slideARs[i];
       const tmp = document.createElement('canvas');
-      renderSlide(s, tmp, 600, Math.round(600 / ar), false);
       const c = document.createElement('canvas');
       c.width = tw; c.height = th;
       c.title = 'Drag to move the crop';
@@ -728,7 +862,9 @@
         const cr = L.gridCrop(ar, tileAR, s.gridOff.x, s.gridOff.y);
         c.getContext('2d').drawImage(tmp, cr.x * tmp.width, cr.y * tmp.height, cr.w * tmp.width, cr.h * tmp.height, 0, 0, tw, th);
       };
-      draw();
+      const fresh = () => { renderSlide(s, tmp, 600, Math.round(600 / ar), false); draw(); };
+      fresh();
+      gridTiles.push({ idx: i, fresh });
       let last = null, moved = false;
       c.addEventListener('pointerdown', (e) => { last = [e.clientX, e.clientY]; moved = false; c.setPointerCapture(e.pointerId); });
       c.addEventListener('pointermove', (e) => {
@@ -740,6 +876,7 @@
         if (cr.h < 1) s.gridOff.y = L.clamp(s.gridOff.y - ((e.clientY - last[1]) / c.clientHeight) * ((2 * cr.h) / (1 - cr.h)), -1, 1);
         last = [e.clientX, e.clientY];
         draw();
+        paintEdit();
       });
       c.addEventListener('pointerup', () => (last = null));
       c.addEventListener('pointercancel', () => (last = null));
@@ -781,52 +918,141 @@
     const p = $('#panel');
     p.innerHTML = '';
     if (!state.slides.length) { p.append(section('', el('p', 'note', 'Add photos to start editing.'))); return; }
-    if (state.view === 'edit') panelEdit(p);
-    else if (state.view === 'feed') panelFeed(p);
-    else panelGrid(p);
+    panelEdit(p);
   }
 
-  function layerRow(label, sub, a, on, onSel, acts) {
+  function bgThumb(s) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 72;
+    paintBg(c.getContext('2d'), s.bg, 72, 72);
+    return c;
+  }
+  function textThumb(ly) {
+    const c = document.createElement('canvas');
+    c.width = c.height = 72;
+    const x = c.getContext('2d');
+    x.fillStyle = isLight(ly.color) ? '#2a2a2a' : '#d9d9d9';
+    x.fillRect(0, 0, 72, 72);
+    x.font = (TEXT_STYLES[ly.style] || TEXT_STYLES.classic).font(28);
+    x.fillStyle = ly.color;
+    x.textAlign = 'center';
+    x.textBaseline = 'middle';
+    x.fillText('Aa', 36, 38);
+    return c;
+  }
+
+  function layerRow(label, sub, thumbEl, on, onSel, acts) {
     const r = el('div', 'lrow' + (on ? ' on' : ''));
     r.tabIndex = 0;
     const name = el('span', 'lname');
     name.append(txt('span', '', label), txt('span', 'lsub', sub));
-    r.append(thumb(a), name);
+    r.append(thumbEl, name);
     if (acts) r.append(...acts);
     r.onclick = onSel;
     r.onkeydown = (e) => { if (e.key === 'Enter' && e.target === r) onSel(); };
     return r;
   }
 
-  function panelEdit(p) {
-    const s = cur(), ly = curLayer();
+  function bgPicker(s) {
+    const box = el('div');
+    const sw = el('div', 'swatches');
+    const add = (val, title) => {
+      const b = button('sw' + (s.bg === val ? ' on' : ''), '', title, () => { checkpoint(); s.bg = val; renderPanel(); refresh(); });
+      b.style.background = bgCss(val);
+      sw.append(b);
+    };
+    add('#000000', 'Black');
+    add('#ffffff', 'White');
+    Object.entries(BACKGROUNDS).forEach(([k, v]) => add('g:' + k, v.name));
+    const col = document.createElement('input');
+    col.type = 'color'; col.value = s.bg.startsWith('g:') ? '#000000' : s.bg; col.title = 'Custom colour';
+    col.onfocus = checkpoint;
+    col.oninput = () => { s.bg = col.value; refresh(); };
+    sw.append(col);
+    box.append(sw);
+    return box;
+  }
 
+  function panelImageLayer(p, ly) {
+    const flip = button('btn', `${ic('flip')} Flip`, 'Mirror this layer', () => { checkpoint(); ly.flip = !ly.flip; refresh(); });
+    const row = el('div', 'row');
+    row.append(flip, button('btn danger', `${ic('trash')} Remove`, null, () => removeLayer(ly.id)));
+    p.append(section('Selected photo',
+      slider('Size', 3, 300, 1, () => Math.round(ly.w * 100), (v) => (ly.w = v / 100), '%', 50),
+      slider('Rotate', -180, 180, 1, () => Math.round(ly.rot), (v) => (ly.rot = v), '°', 0),
+      slider('Opacity', 0, 100, 1, () => Math.round(ly.opacity * 100), (v) => (ly.opacity = v / 100), '%', 100),
+      row,
+      el('p', 'note', 'Drag to move. Corner handles resize, the top handle rotates (hold Shift to snap).')));
+  }
+
+  function panelText(p, ly) {
+    const f = el('label', 'field');
+    const t = document.createElement('textarea');
+    t.value = ly.text; t.rows = 3;
+    t.onfocus = checkpoint;
+    t.oninput = () => { ly.text = t.value; refresh(); };
+    f.append(txt('span', '', 'Text'), t);
+
+    const styles = el('div', 'row');
+    Object.entries(TEXT_STYLES).forEach(([k, v]) => {
+      const b = button('chip' + (ly.style === k ? ' on' : ''), v.name, null, () => { checkpoint(); ly.style = k; renderPanel(); refresh(); });
+      b.style.font = v.font(13);
+      styles.append(b);
+    });
+
+    const sw = el('div', 'swatches');
+    TEXT_COLORS.forEach((c) => {
+      const b = button('sw' + (ly.color === c ? ' on' : ''), '', c, () => { checkpoint(); ly.color = c; renderPanel(); refresh(); });
+      b.style.background = c;
+      sw.append(b);
+    });
+    const pick = document.createElement('input');
+    pick.type = 'color'; pick.value = ly.color; pick.title = 'Custom colour';
+    pick.onfocus = checkpoint;
+    pick.oninput = () => { ly.color = pick.value; refresh(); };
+    sw.append(pick);
+
+    const gap = (n) => { n.style.marginTop = '12px'; return n; };
+    const row = gap(el('div', 'row'));
+    row.append(button('btn danger', `${ic('trash')} Remove`, null, () => removeLayer(ly.id)));
+    p.append(section('Text', f, styles, gap(sw),
+      gap(seg([['left', 'Left'], ['center', 'Centre'], ['right', 'Right']], ly.align, (v) => { checkpoint(); ly.align = v; renderPanel(); refresh(); })),
+      gap(toggle('Text background', ly.fill, (v) => { checkpoint(); ly.fill = v; refresh(); })),
+      slider('Size', 2, 40, 1, () => Math.round(ly.size * 100), (v) => (ly.size = v / 100), '%', 9),
+      slider('Rotate', -180, 180, 1, () => Math.round(ly.rot), (v) => (ly.rot = v), '°', 0),
+      slider('Opacity', 0, 100, 1, () => Math.round(ly.opacity * 100), (v) => (ly.opacity = v / 100), '%', 100),
+      row,
+      el('p', 'note', 'Drag to move, or double-click the text on the canvas to edit it. Instagram’s own typeface isn’t available to other apps, so these styles use system fonts.')));
+  }
+
+  function panelEdit(p) {
+    const s = cur(), ly = curLayer(), a0 = A(s.asset);
     const head = el('div', 'sec-head', '<h3>Layers</h3>');
-    head.append(button('mini text', `${ic('plus')} Add photo`, 'Add a photo on top of this slide', () => $('#fileLayer').click()));
+    const adds = el('div', 'row');
+    adds.append(button('mini text', `${ic('image')} Photo`, 'Add a photo on top of this slide', () => $('#fileLayer').click()), button('mini text', `${ic('type')} Text`, 'Add text on top of this slide', addTextLayer));
+    head.append(adds);
     const list = el('div', 'layers');
-    [...s.layers].reverse().forEach((l, k) => {
+    [...s.layers].reverse().forEach((l) => {
       const mk = (icon, title, fn) => button('mini', ic(icon), title, (e) => { e.stopPropagation(); fn(); });
-      list.append(layerRow(A(l.asset).name, `Layer ${s.layers.length - k}`, A(l.asset), state.layer === l.id,
+      const text = isText(l);
+      list.append(layerRow(text ? l.text.split('\n')[0].slice(0, 28) || 'Text' : A(l.asset).name, text ? 'Text' : 'Photo',
+        text ? textThumb(l) : thumb(A(l.asset)), state.layer === l.id,
         () => { state.layer = l.id; renderPanel(); paintEdit(); },
         [mk('up', 'Bring forward', () => shiftLayer(l.id, 1)), mk('down', 'Send backward', () => shiftLayer(l.id, -1)), mk('trash', 'Remove layer', () => removeLayer(l.id))]));
     });
-    list.append(layerRow(A(s.asset).name, 'Background photo', A(s.asset), state.layer == null, () => { state.layer = null; renderPanel(); paintEdit(); }));
+    const selBg = () => { state.layer = null; renderPanel(); paintEdit(); };
+    list.append(a0.blank
+      ? layerRow('Blank slide', 'Background', bgThumb(s), state.layer == null, selBg)
+      : layerRow(a0.name, 'Background photo', thumb(a0), state.layer == null, selBg));
     const sec = el('div', 'sec');
     sec.append(head, list);
-    if (!s.layers.length) sec.append(el('p', 'note', 'Drag a slide from the left onto the canvas, or onto the middle of another slide, to layer it. Hold Alt to keep the original slide.'));
+    if (!s.layers.length) sec.append(el('p', 'note', 'Add a photo or text above, or drag a slide from the left onto the canvas. Hold Alt to keep the original slide.'));
     p.append(sec);
 
-    if (ly) {
-      const del = button('btn danger', `${ic('trash')} Remove layer`, null, () => removeLayer(ly.id));
-      const flip = button('btn', `${ic('flip')} Flip`, 'Mirror this layer', () => { checkpoint(); ly.flip = !ly.flip; refresh(); });
-      const row = el('div', 'row');
-      row.append(flip, del);
-      p.append(section('Selected layer',
-        slider('Size', 3, 300, 1, () => Math.round(ly.w * 100), (v) => (ly.w = v / 100), '%', 50),
-        slider('Rotate', -180, 180, 1, () => Math.round(ly.rot), (v) => (ly.rot = v), '°', 0),
-        slider('Opacity', 0, 100, 1, () => Math.round(ly.opacity * 100), (v) => (ly.opacity = v / 100), '%', 100),
-        row,
-        el('p', 'note', 'Drag to move. Corner handles resize, the top handle rotates (hold Shift to snap).')));
+    if (ly) return isText(ly) ? panelText(p, ly) : panelImageLayer(p, ly);
+
+    if (a0.blank) {
+      p.append(section('Background', bgPicker(s), el('p', 'note', 'Gradients are close to Instagram’s own. Instagram doesn’t publish the exact colours.')));
       return;
     }
 
@@ -839,25 +1065,21 @@
     fit.style.marginTop = '10px';
     const photo = section('Photo', tools, fit);
     if (s.fit === 'contain') {
-      const col = document.createElement('input');
-      col.type = 'color'; col.value = s.bg; col.title = 'Border colour';
-      col.onfocus = checkpoint;
-      col.oninput = () => { s.bg = col.value; refresh(); };
-      const r = el('div', 'row');
-      r.append(txt('span', 'muted', 'Border colour'), col);
-      photo.append(r);
+      const bg = el('div', 'field');
+      bg.style.marginTop = '12px';
+      bg.append(txt('span', '', 'Border background'), bgPicker(s));
+      photo.append(bg);
     }
     photo.append(el('p', 'note', 'Drag the photo to reposition it, scroll to zoom. The faded area outside the frame is what gets cropped.'));
     p.append(photo);
 
-    const adj = section('Adjust',
+    p.append(section('Adjust',
       slider('Zoom', 1, 4, 0.01, () => s.zoom, (v) => (s.zoom = v), '×', 1),
       slider('Brightness', 50, 150, 1, () => s.adj.brightness, (v) => (s.adj.brightness = v), '%', 100),
       slider('Contrast', 50, 150, 1, () => s.adj.contrast, (v) => (s.adj.contrast = v), '%', 100),
       slider('Saturation', 0, 200, 1, () => s.adj.saturation, (v) => (s.adj.saturation = v), '%', 100),
       slider('Warmth', -100, 100, 1, () => s.adj.warmth, (v) => (s.adj.warmth = v), '', 0),
-      el('p', 'note', 'Double-click a slider to reset it.'));
-    p.append(adj);
+      el('p', 'note', 'Double-click a slider to reset it.')));
 
     const chips = el('div', 'row');
     Object.entries(FILTERS).forEach(([name, vals]) => chips.append(button('chip', name, null, () => { checkpoint(); s.adj = Object.assign(DEFAULT_ADJ(), vals); renderPanel(); refresh(); })));
@@ -872,47 +1094,75 @@
     p.append(section('Filters', chips, all, reset));
   }
 
-  function panelFeed(p) {
-    const f1 = el('div', 'field', '<span>Username</span>');
-    const u = document.createElement('input'); u.type = 'text'; u.value = state.username;
-    u.oninput = () => { state.username = u.value; renderStage(); };
-    f1.append(u);
-    const f2 = el('div', 'field', '<span>Caption</span>');
-    const t = document.createElement('textarea'); t.value = state.caption;
-    t.oninput = () => { state.caption = t.value; renderStage(); };
-    f2.append(t);
-    const f3 = el('div', 'field', '<span>Phone appearance</span>');
-    f3.append(seg([['light', 'Light'], ['dark', 'Dark']], state.theme, (v) => { state.theme = v; renderStage(); renderPanel(); }));
-    p.append(section('Post details', f1, f2, f3, el('p', 'note', 'These only affect the preview. They are not exported.')));
+  // ---------- live preview (feed / profile grid) ----------
+  let pv = null, gridTiles = null;
+  const labeled = (label, input) => { const d = el('label', 'field'); d.append(txt('span', '', label), input); return d; };
+  function buildPreview(pane) {
+    pv = { opts: el('div', 'pv-opts'), body: el('div', 'pv-body') };
+    const f = el('div', 'pv-fields');
+    const u = document.createElement('input');
+    u.type = 'text'; u.value = state.username; u.placeholder = 'yourname';
+    u.oninput = () => { state.username = u.value; syncPreviewText(); };
+    f.append(labeled('Username', u));
+    if (state.preview === 'feed') {
+      const c = document.createElement('textarea');
+      c.value = state.caption; c.rows = 3;
+      c.oninput = () => { state.caption = c.value; syncPreviewText(); };
+      f.append(labeled('Caption', c));
+    }
+    f.append(el('p', 'note', 'Preview only. These are not exported.'));
+    pane.append(pv.opts, pv.body, f);
+    drawPreviewOpts();
+    drawPreviewBody();
   }
-
-  function panelGrid(p) {
-    const f1 = el('div', 'field', '<span>Tile shape</span>');
-    f1.append(seg([['new', 'Current (3:4)'], ['old', 'Classic (1:1)']], state.gridShape, (v) => { state.gridShape = v; renderStage(); renderPanel(); }));
-    const f2 = el('div', 'field', '<span>Show</span>');
-    f2.append(seg([['post', 'This post'], ['each', 'Every photo']], state.gridFill, (v) => { state.gridFill = v; renderStage(); renderPanel(); }));
-    const f3 = el('div', 'field', '<span>Phone appearance</span>');
-    f3.append(seg([['light', 'Light'], ['dark', 'Dark']], state.theme, (v) => { state.theme = v; renderStage(); renderPanel(); }));
-    p.append(section('Profile grid', f1, f2, f3, el('p', 'note', 'Posts show as a centre crop on your profile and a carousel shows only its first slide. Drag a tile to move the crop, like “Adjust preview” on Instagram.')));
+  function drawPreviewOpts() {
+    const o = pv.opts;
+    o.innerHTML = '';
+    const row = (label, ctl) => { const r = el('div', 'pv-row'); r.append(txt('span', '', label), ctl); o.append(r); };
+    const redo = (fn) => (v) => { fn(v); drawPreviewOpts(); drawPreviewBody(); paintEdit(); };
+    row('Appearance', seg([['light', 'Light'], ['dark', 'Dark']], state.theme, redo((v) => (state.theme = v))));
+    if (state.preview === 'grid') {
+      row('Grid tiles', seg([['new', '3:4'], ['old', '1:1']], state.gridShape, redo((v) => (state.gridShape = v))));
+      row('Show', seg([['post', 'This post'], ['each', 'Every photo']], state.gridFill, redo((v) => (state.gridFill = v))));
+    }
+  }
+  function drawPreviewBody() {
+    pv.body.innerHTML = '';
+    feed = null;
+    gridTiles = null;
+    if (state.preview === 'feed') buildFeed(pv.body); else buildGrid(pv.body);
+  }
+  function syncPreviewText() {
+    const n = state.username || 'yourname';
+    pv.body.querySelectorAll('.un, .cap b').forEach((e) => (e.textContent = n));
+    const c = pv.body.querySelector('.cap span');
+    if (c) c.textContent = state.caption;
+  }
+  // Repaints only the slide being edited in the preview.
+  function paintPreview() {
+    const i = state.sel;
+    if (feed && feed.cells[i]) renderSlide(state.slides[i], feed.cells[i], 780, Math.round(780 / frameInfo().slideARs[i]), false);
+    if (gridTiles) gridTiles.forEach((t) => { if (t.idx === i) t.fresh(); });
   }
 
   // ---------- export ----------
   // A slide is "untouched" when exporting it would give back the original pixels, so we copy the file byte for byte.
   function pristine(s, frameAR) {
     const a = A(s.asset);
-    return !s.layers.length && s.rot === 0 && !s.flip && s.zoom === 1 && s.fit === 'cover' && isDefaultAdj(s.adj) &&
+    return !a.blank && !s.layers.length && s.rot === 0 && !s.flip && s.zoom === 1 && s.fit === 'cover' && isDefaultAdj(s.adj) &&
       Math.abs(frameAR / (a.w / a.h) - 1) < 0.003;
   }
   function outSize(s, a, ar) {
     const iw = s.rot % 180 ? a.h : a.w, ih = s.rot % 180 ? a.w : a.h;
-    let sz = L.nativeSize(iw, ih, ar, s.zoom, s.fit);
+    let sz = a.blank ? L.exportSize(ar) : L.nativeSize(iw, ih, ar, s.zoom, s.fit);
     for (const ly of s.layers) { // keep big layers sharp too
+      if (isText(ly)) continue;
       const need = A(ly.asset).w / ly.w;
       if (need > sz.w) sz = L.capSize(need, need / ar);
     }
     return sz;
   }
-  const pickType = (a, fmt) => (fmt === 'jpeg' ? 'image/jpeg' : fmt === 'png' ? 'image/png' : a.file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png');
+  const pickType = (a, fmt) => (fmt === 'jpeg' ? 'image/jpeg' : fmt === 'png' ? 'image/png' : a.blank || a.file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png');
 
   function closeModal() { $('#modal').hidden = true; $('#modal').innerHTML = ''; }
 
@@ -927,7 +1177,7 @@
     m.hidden = false;
     m.onclick = (e) => { if (e.target === m) closeModal(); };
     const card = el('div', 'card');
-    card.append(txt('h2', '', 'Export photos'));
+    card.append(txt('h2', '', 'Export'));
     const ul = el('ul');
     if (keep) ul.append(txt('li', '', `${keep} unchanged: copied as the exact original file (same pixels, EXIF and colour profile).`));
     if (edit) ul.append(txt('li', '', `${edit} edited: re-rendered at full resolution, never downscaled.`));
@@ -1014,7 +1264,7 @@
   $('#export').onclick = openExport;
   $('#file').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
   $('#fileLayer').onchange = (e) => { addLayerFiles(e.target.files); e.target.value = ''; };
-  document.querySelectorAll('#views button').forEach((b) => (b.onclick = () => { state.view = b.dataset.view; renderAll(); }));
+  document.querySelectorAll('#views button').forEach((b) => (b.onclick = () => { state.preview = b.dataset.view; renderStage(); updateTop(); }));
   new ResizeObserver(() => layoutEdit()).observe($('#stage'));
 
   // Drag and drop. Files dropped on the edit canvas become layers; anywhere else they become new slides.
@@ -1051,13 +1301,13 @@
 
   // Edit view zoom: Ctrl+scroll (or trackpad pinch) zooms at the cursor; middle-drag or Space+drag pans; Ctrl+0 resets.
   stage.addEventListener('wheel', (e) => {
-    if (!(e.ctrlKey || e.metaKey) || !ed) return;
+    if (!(e.ctrlKey || e.metaKey) || !ed || !ed.holder.contains(e.target)) return;
     e.preventDefault();
     zoomView(Math.exp(-e.deltaY * 0.0015), e.clientX, e.clientY);
   }, { passive: false });
   stage.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); }); // no autoscroll
   stage.addEventListener('pointerdown', (e) => {
-    if (!ed || !(e.button === 1 || (e.button === 0 && space))) return;
+    if (!ed || !ed.holder.contains(e.target) || !(e.button === 1 || (e.button === 0 && space))) return;
     e.preventDefault();
     e.stopPropagation(); // keep the photo/layer drag from starting
     vp = { x: e.clientX, y: e.clientY };
@@ -1066,8 +1316,8 @@
   }, true);
   stage.addEventListener('pointermove', (e) => {
     if (!vp) return;
-    view.x += e.clientX - vp.x;
-    view.y += e.clientY - vp.y;
+    cam.x += e.clientX - vp.x;
+    cam.y += e.clientY - vp.y;
     vp = { x: e.clientX, y: e.clientY };
     applyView();
   });
@@ -1083,13 +1333,13 @@
     const t = document.activeElement;
     const typing = t && (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && t.type === 'text'));
     const mod = e.ctrlKey || e.metaKey;
-    if (mod && e.key === '0' && ed && !typing) { e.preventDefault(); return resetView(); }
+    if (mod && e.key === '0' && ed) { e.preventDefault(); return resetView(); }
     if (mod && e.key.toLowerCase() === 'z' && !typing) { e.preventDefault(); return e.shiftKey ? redo() : undo(); }
     if (mod && e.key.toLowerCase() === 'y' && !typing) { e.preventDefault(); return redo(); }
     if (t && /INPUT|TEXTAREA|SELECT/.test(t.tagName)) return;
     if (!state.slides.length) return;
     if (e.code === 'Space' && ed) { e.preventDefault(); setSpace(true); return; }
-    const ly = state.view === 'edit' ? curLayer() : null;
+    const ly = curLayer();
     if (e.key === 'Escape' && ly) { state.layer = null; renderPanel(); paintEdit(); }
     else if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); moveSlide(state.sel, state.sel - 1); }
     else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); moveSlide(state.sel, state.sel + 1); }
@@ -1108,6 +1358,6 @@
   });
 
   // test hook (used by the headless smoke test)
-  window.__ig = { state, assets, addFiles, addLayerFiles, renderAll, moveSlide, placeOnto, undo, redo, pristine, frameInfo };
+  window.__ig = { state, assets, addFiles, addLayerFiles, addBlankSlide, addTextLayer, renderAll, moveSlide, placeOnto, undo, redo, pristine, frameInfo };
   renderAll();
 })();

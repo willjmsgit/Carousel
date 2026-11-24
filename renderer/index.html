@@ -10,11 +10,13 @@
 <body>
   <header class="top">
     <div class="brand"><span class="logo" aria-hidden="true"></span><span class="wordmark">Post Preview</span></div>
-    <nav id="views" class="seg views" aria-label="View">
-      <button type="button" data-view="edit">Edit</button>
-      <button type="button" data-view="feed">Feed</button>
-      <button type="button" data-view="grid">Profile grid</button>
-    </nav>
+    <div class="views"><span class="muted">Live preview</span>
+      <nav id="views" class="seg" aria-label="Live preview">
+        <button type="button" data-view="off">Off</button>
+        <button type="button" data-view="feed">Feed</button>
+        <button type="button" data-view="grid">Profile</button>
+      </nav>
+    </div>
     <div class="top-actions">
       <button type="button" id="undo" class="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo"></button>
       <button type="button" id="redo" class="icon-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"></button>

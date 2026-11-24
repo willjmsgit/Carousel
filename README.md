@@ -1,6 +1,6 @@
 # IG Post Preview
 
-Electron app: load photos, edit them, layer one photo on top of another, reorder, and preview them as an Instagram carousel and on the profile grid.
+Electron app: load photos, edit them, layer photos and text, reorder, and preview them live as an Instagram carousel and on the profile grid.
 
 ## Run
 
@@ -11,11 +11,15 @@ npm start
 
 Tests for the crop/ratio maths: `npm test`. Installer: `npm run dist`.
 
-## Views
+## Layout
 
-- **Edit**: drag the photo to reposition it, scroll to zoom. Drag a slide from the left rail onto the canvas (or onto the middle of another slide) to place it as a layer. Layers can be moved, resized (corner handles), rotated (top handle, Shift snaps to 15°), faded, flipped and reordered. Hold Alt while dropping to keep the original slide.
-- **Feed**: phone preview with username, caption and light/dark.
-- **Profile grid**: first-slide crop on the 3:4 (or classic 1:1) grid. Drag a tile to move the crop.
+The editor is always on the left. **Live preview** (top bar) puts the Instagram feed or your profile grid beside it and repaints as you edit. Turn it off for a bigger canvas.
+
+- **Edit**: drag the photo to reposition it, scroll to zoom it. Ctrl+scroll (or pinch) zooms the canvas itself; middle-drag or Space+drag pans; Ctrl+0 resets.
+- **Layers**: add photos or text on top of any slide, or drag a slide from the rail onto the canvas (Alt keeps the original). Move, resize (corner handles), rotate (top handle, Shift snaps to 15°), fade and reorder.
+- **Text**: five styles (Classic, Modern, Neon, Typewriter, Strong) in system fonts, colours, alignment and an optional text background. Double-click text on the canvas to edit it.
+- **Backgrounds**: solid colours and Instagram-style gradients. They show behind a photo set to "Fit with border", and fill a **blank slide** (the tile at the bottom of the rail).
+- **Feed / Profile**: username, caption, light/dark and grid options live in the preview pane. In the grid, drag a tile to move the crop.
 
 Undo/redo: Ctrl+Z / Ctrl+Shift+Z. Alt+Left/Right reorders the open slide, Delete removes the layer or slide.
 

@@ -8,9 +8,9 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1480,
     height: 940,
-    minWidth: 1100,
-    minHeight: 640,
-    backgroundColor: '#1b1a18',
+    minWidth: 1280,
+    minHeight: 700,
+    backgroundColor: '#000000',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
