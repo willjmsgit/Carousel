@@ -34,6 +34,14 @@ assert.deepStrictEqual(L.exportSize(0.8), { w: 1080, h: 1350 });
 assert.deepStrictEqual(L.exportSize(0.75), { w: 1080, h: 1440 });
 assert.deepStrictEqual(L.exportSize(1.91), { w: 1080, h: 565 });
 
+// Native-resolution export: the photo is never resampled (apart from zoom) and never upscaled
+assert.deepStrictEqual(L.nativeSize(4000, 3000, 0.8, 1, 'cover'), { w: 2400, h: 3000 }); // crop sides
+assert.deepStrictEqual(L.nativeSize(3000, 4000, 1, 1, 'cover'), { w: 3000, h: 3000 }); // crop top/bottom
+assert.deepStrictEqual(L.nativeSize(4000, 3000, 0.8, 1, 'contain'), { w: 4000, h: 5000 }); // border added
+assert.deepStrictEqual(L.nativeSize(4000, 3000, 1, 2, 'cover'), { w: 1500, h: 1500 }); // 2x zoom = smaller crop
+assert.deepStrictEqual(L.nativeSize(20000, 10000, 2, 1, 'cover'), { w: 8192, h: 4096 }); // capped
+assert.deepStrictEqual(L.nativeSize(4000, 3000, 4 / 3, 1, 'cover'), { w: 4000, h: 3000 }); // same ratio = same size
+
 // Placement: cover fills, contain fits, pan is clamped
 let p = L.placeImage(4000, 3000, 1080, 1350, 1, 0, 0, 'cover');
 near(3000 * p.scale, 1350, 1e-6);

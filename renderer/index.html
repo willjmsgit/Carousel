@@ -9,44 +9,33 @@
 </head>
 <body>
   <header class="top">
-    <button id="add" class="btn">Add images</button>
-    <input id="file" type="file" accept="image/*" multiple hidden />
-    <label>Ratio
-      <select id="ratio">
-        <option value="auto">Auto (from first slide)</option>
-        <option value="3:4">3:4 (1080×1440)</option>
-        <option value="4:5">4:5 (1080×1350)</option>
-        <option value="1:1">1:1 (1080×1080)</option>
-        <option value="1.91:1">1.91:1 (1080×566)</option>
-      </select>
-    </label>
-    <label>Carousel
-      <select id="mode">
-        <option value="match">Match first slide (classic)</option>
-        <option value="mixed">Mixed / Original (approx.)</option>
-      </select>
-    </label>
-    <label>Phone
-      <select id="theme">
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-    </label>
-    <span id="count" class="muted"></span>
-    <span class="spacer"></span>
-    <button id="export" class="btn primary">Export JPEGs…</button>
+    <div class="brand"><span class="logo" aria-hidden="true"></span><span class="wordmark">Post Preview</span></div>
+    <nav id="views" class="seg views" aria-label="View">
+      <button type="button" data-view="edit">Edit</button>
+      <button type="button" data-view="feed">Feed</button>
+      <button type="button" data-view="grid">Profile grid</button>
+    </nav>
+    <div class="top-actions">
+      <button type="button" id="undo" class="icon-btn" title="Undo (Ctrl+Z)" aria-label="Undo"></button>
+      <button type="button" id="redo" class="icon-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"></button>
+      <button type="button" id="add" class="btn"></button>
+      <button type="button" id="export" class="btn primary"></button>
+    </div>
   </header>
+
+  <div id="bar" class="bar" hidden></div>
 
   <main>
     <aside id="strip" class="strip" aria-label="Slides"></aside>
-    <section id="stage" class="stage">
-      <div id="phone" class="phone light"></div>
-      <div id="empty" class="empty">Drop images here or click <b>Add images</b></div>
-    </section>
+    <section id="stage" class="stage"></section>
     <aside id="panel" class="panel"></aside>
   </main>
 
-  <div id="toast" class="toast" hidden></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <div id="modal" class="modal" hidden></div>
+  <input id="file" type="file" accept="image/*" multiple hidden />
+  <input id="fileLayer" type="file" accept="image/*" multiple hidden />
+
   <script src="ratios.js"></script>
   <script src="app.js"></script>
 </body>

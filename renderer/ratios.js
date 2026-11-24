@@ -7,6 +7,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   const WIDTH = 1080;
   const MAX_SLIDES = 20;
+  const MAX_EXPORT = 8192; // longest side we will render when exporting
   const MIN_AR = 3 / 4; // tallest feed shape the app accepts (w/h)
   const MAX_AR = 1.91; // widest
   const GRID_AR = 3 / 4; // current profile-grid tile
@@ -61,5 +62,21 @@
 
   const exportSize = (ar) => ({ w: WIDTH, h: Math.round(WIDTH / ar) });
 
-  return { WIDTH, MAX_SLIDES, MIN_AR, MAX_AR, GRID_AR, PRESETS, clamp, clampAR, naturalAR, carousel, placeImage, gridCrop, exportSize };
+  // Scale (w, h) down so the longest side is at most `cap`. Never scales up.
+  function capSize(w, h, cap = MAX_EXPORT) {
+    const k = Math.min(1, cap / Math.max(w, h));
+    return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)) };
+  }
+
+  // Output size at which the base photo is drawn 1:1 (no resampling, apart from zoom).
+  // iw/ih are the photo's pixel size after rotation; ar is the frame's width/height.
+  function nativeSize(iw, ih, ar, zoom, fit, cap) {
+    const z = Math.max(1, zoom);
+    const widthBased = (fit !== 'contain') === (ar >= iw / ih);
+    const w = widthBased ? iw / z : (ih / z) * ar;
+    const h = widthBased ? iw / z / ar : ih / z;
+    return capSize(w, h, cap);
+  }
+
+  return { WIDTH, MAX_SLIDES, MAX_EXPORT, MIN_AR, MAX_AR, GRID_AR, PRESETS, clamp, clampAR, naturalAR, carousel, placeImage, gridCrop, exportSize, capSize, nativeSize };
 });

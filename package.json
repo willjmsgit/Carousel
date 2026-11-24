@@ -1,7 +1,7 @@
 {
   "name": "ig-post-preview",
-  "version": "0.1.0",
-  "description": "Preview, reorder and edit images as they will appear in an Instagram post",
+  "version": "0.2.0",
+  "description": "Edit, layer, reorder and preview images as they will appear in an Instagram post",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
