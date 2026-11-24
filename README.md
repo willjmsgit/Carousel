@@ -22,10 +22,10 @@ Pick a gradient swatch to give every slide a consistent look.
 
 <img src="docs/screenshots/themes.png" alt="Backgrounds" width="80%">
 
-### Export
-Export all slides in one go, ready to upload.
+### Spread across slides
+Cut one wide photo into slides that join up seamlessly when swiped.
 
-<img src="docs/screenshots/export.png" alt="Export" width="80%">
+<img src="docs/screenshots/spread.png" alt="Spread across slides" width="80%">
 
 ## Getting started
 
