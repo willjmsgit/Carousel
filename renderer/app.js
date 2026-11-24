@@ -29,6 +29,14 @@
     comment: '<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l2-5.2A8.4 8.4 0 1 1 21 11.5z"/>',
     send: '<path d="m22 2-7 20-4-9-9-4 20-7z"/><path d="M22 2 11 13"/>',
     type: '<path d="M4 7V4h16v3M9 20h6M12 4v16"/>',
+    sidebar: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+    check: '<path d="m5 12 5 5 9-10"/>',
+    shFirst: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m10 10 2-1v7"/>',
+    shMixed: '<rect x="2.5" y="4" width="8" height="16" rx="1.5"/><rect x="13.5" y="4" width="8" height="8" rx="1.5"/><rect x="13.5" y="14" width="8" height="6" rx="1.5"/>',
+    sh34: '<rect x="6" y="4" width="12" height="16" rx="2"/>',
+    sh45: '<rect x="4.8" y="3" width="14.4" height="18" rx="2"/>',
+    sh11: '<rect x="4" y="4" width="16" height="16" rx="2"/>',
+    sh191: '<rect x="2" y="6.5" width="20" height="11" rx="2"/>',
     bookmark: '<path d="m19 21-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>',
   };
   const ic = (n) => `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
@@ -88,6 +96,8 @@
     slides: [], // [{ id, asset, rot, flip, zoom, panX, panY, fit, bg, adj, layers: [{ id, asset, cx, cy, w, rot, flip, opacity }] }]
     sel: 0,
     layer: null, // selected layer id on the selected slide; null = the background photo
+    panel: true, // right sidebar (layers + adjustments) visible
+    shapeMenu: false,
     preview: 'feed', // off | feed | grid: live preview beside the editor
     ratio: 'auto',
     mode: 'match',
@@ -165,7 +175,7 @@
   }
 
   const makeText = (x = 0.5, y = 0.5) => ({ id: ++uid, kind: 'text', text: 'Your text', style: 'classic', color: '#ffffff', size: 0.09, align: 'center', fill: false, cx: x, cy: y, rot: 0, opacity: 1 });
-  function focusText() { const t = $('#panel textarea'); if (t) { t.focus(); t.select(); } }
+  function focusText() { if (!state.panel) setPanel(true); const t = $('#panel textarea'); if (t) { t.focus(); t.select(); } }
   function addTextLayer() {
     const s = cur();
     if (!s) return;
@@ -439,27 +449,53 @@
     return d;
   }
 
+  const SHAPES = [['first', 'Match first photo', 'shFirst'], ['mixed', 'Mixed', 'shMixed'], ['3:4', '3:4', 'sh34'], ['4:5', '4:5', 'sh45'], ['1:1', 'Square', 'sh11'], ['1.91:1', 'Landscape', 'sh191']];
+
   function renderBar() {
-    const b = $('#bar');
-    b.innerHTML = '';
-    b.hidden = !state.slides.length;
-    if (!state.slides.length) return;
+    const wrap = $('#shapeWrap'), btn = $('#shapeBtn'), menu = $('#shapeMenu');
+    wrap.hidden = !state.slides.length;
+    menu.innerHTML = '';
+    if (!state.slides.length) { state.shapeMenu = false; menu.hidden = true; return; }
     const val = state.ratio !== 'auto' ? state.ratio : state.mode === 'mixed' ? 'mixed' : 'first';
-    const g1 = el('div', 'grp');
-    g1.append(txt('span', 'muted', 'Post shape'), seg([['first', 'Match first photo'], ['mixed', 'Mixed'], ['3:4', 'Portrait 3:4'], ['4:5', 'Portrait 4:5'], ['1:1', 'Square'], ['1.91:1', 'Landscape']], val, (v) => {
-      if (v === 'first') { state.ratio = 'auto'; state.mode = 'match'; }
-      else if (v === 'mixed') { state.ratio = 'auto'; state.mode = 'mixed'; }
-      else state.ratio = v;
-      renderAll();
-    }));
+    const now = SHAPES.find((x) => x[0] === val);
+    btn.innerHTML = `${ic(now[2])}<span>${now[1]}</span>${ic('down')}`;
+    btn.title = 'Post shape';
+    btn.setAttribute('aria-label', `Post shape: ${now[1]}`);
+    btn.setAttribute('aria-expanded', String(state.shapeMenu));
+    menu.hidden = !state.shapeMenu;
+    SHAPES.forEach(([v, label, icon]) => {
+      const on = v === val;
+      const it = button('menu-item' + (on ? ' on' : ''), `${ic(icon)}<span>${label}</span>${on ? ic('check') : ''}`, null, () => {
+        if (v === 'first') { state.ratio = 'auto'; state.mode = 'match'; }
+        else if (v === 'mixed') { state.ratio = 'auto'; state.mode = 'mixed'; }
+        else state.ratio = v;
+        state.shapeMenu = false;
+        renderAll();
+      });
+      it.setAttribute('role', 'menuitemradio');
+      it.setAttribute('aria-checked', String(on));
+      menu.append(it);
+    });
     const ar = frameInfo().frameAR;
     const names = [[3 / 4, '3:4'], [4 / 5, '4:5'], [1, '1:1'], [1.91, '1.91:1']];
     const hit = names.find(([v]) => Math.abs(v - ar) < 0.01);
     const nm = hit ? hit[1] : `${ar.toFixed(2)}:1`;
     const hint = val === 'mixed' ? 'Each slide keeps its own shape (3:4 to 1.91:1 only). The tallest sets the frame; shorter ones get bars.'
       : val === 'first' ? `Every slide is cropped to slide 1’s shape (${nm}).` : `Every slide is cropped to ${nm}.`;
-    const g2 = txt('span', 'muted hint', hint);
-    b.append(g1, g2, el('span', 'spacer'));
+    menu.append(txt('p', 'menu-note', hint));
+  }
+
+  function setShapeMenu(open) { state.shapeMenu = open; renderBar(); }
+
+  function setPanel(open) {
+    state.panel = open;
+    $('#panel').hidden = !open;
+    $('main').classList.toggle('no-panel', !open);
+    const b = $('#togglePanel');
+    b.setAttribute('aria-pressed', String(open));
+    b.title = (open ? 'Hide sidebar' : 'Show sidebar') + ' (Ctrl+\\)';
+    b.setAttribute('aria-label', open ? 'Hide sidebar' : 'Show sidebar');
+    try { localStorage.setItem('carousel.panel', open ? '1' : '0'); } catch (e) { /* storage unavailable */ }
   }
 
   // ----- slide rail -----
@@ -831,7 +867,7 @@
     const total = 9;
     gridTiles = [];
     const host = el('div', `profile ${state.theme}`);
-    const hd = el('div', 'p-head', `<div class="av"><i></i></div><div><div class="un"></div><div class="stats"><span><b>${list.length}</b> posts</span><span><b>1,234</b> followers</span><span><b>321</b> following</span></div></div>`);
+    const hd = el('div', 'p-head', `<div class="av"><i></i></div><div><div class="un"></div><div class="stats"><span><b>${list.length}</b> posts</span><span><b>0</b> followers</span><span><b>0</b> following</span></div></div>`);
     hd.querySelector('.un').textContent = state.username || 'yourname';
     const grid = el('div', 'grid');
     const tw = 300, th = Math.round(300 / tileAR);
@@ -1227,6 +1263,13 @@
   $('#redo').onclick = redo;
   $('#add').onclick = () => $('#file').click();
   $('#export').onclick = openExport;
+  $('#togglePanel').innerHTML = ic('sidebar');
+  $('#togglePanel').onclick = () => setPanel(!state.panel);
+  $('#shapeBtn').onclick = () => setShapeMenu(!state.shapeMenu);
+  document.addEventListener('pointerdown', (e) => { if (state.shapeMenu && !$('#shapeWrap').contains(e.target)) setShapeMenu(false); });
+  let savedPanel = '1';
+  try { savedPanel = localStorage.getItem('carousel.panel') || '1'; } catch (e) { /* storage unavailable */ }
+  setPanel(savedPanel !== '0');
   $('#file').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
   $('#fileLayer').onchange = (e) => { addLayerFiles(e.target.files); e.target.value = ''; };
   document.querySelectorAll('#views button').forEach((b) => (b.onclick = () => { state.preview = b.dataset.view; renderStage(); updateTop(); }));
@@ -1295,6 +1338,8 @@
 
   window.addEventListener('keydown', (e) => {
     if (!$('#modal').hidden) { if (e.key === 'Escape') closeModal(); return; }
+    if (state.shapeMenu && e.key === 'Escape') { setShapeMenu(false); $('#shapeBtn').focus(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key === '\\') { e.preventDefault(); return setPanel(!state.panel); }
     const t = document.activeElement;
     const typing = t && (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && t.type === 'text'));
     const mod = e.ctrlKey || e.metaKey;

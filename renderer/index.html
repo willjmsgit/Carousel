@@ -4,12 +4,17 @@
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>IG Post Preview</title>
+  <title>Carousel</title>
+  <link rel="icon" href="icon.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="top">
-    <div class="brand"><span class="logo" aria-hidden="true"></span><span class="wordmark">Post Preview</span></div>
+    <div class="brand"><img class="logo" src="icon.svg" alt="" /><span class="wordmark">Carousel</span></div>
+    <div id="shapeWrap" class="menu-wrap" hidden>
+      <button type="button" id="shapeBtn" class="btn" aria-haspopup="menu"></button>
+      <div id="shapeMenu" class="menu" role="menu" hidden></div>
+    </div>
     <div class="views"><span class="muted">Live preview</span>
       <nav id="views" class="seg" aria-label="Live preview">
         <button type="button" data-view="off">Off</button>
@@ -22,10 +27,9 @@
       <button type="button" id="redo" class="icon-btn" title="Redo (Ctrl+Shift+Z)" aria-label="Redo"></button>
       <button type="button" id="add" class="btn"></button>
       <button type="button" id="export" class="btn primary"></button>
+      <button type="button" id="togglePanel" class="icon-btn"></button>
     </div>
   </header>
-
-  <div id="bar" class="bar" hidden></div>
 
   <main>
     <aside id="strip" class="strip" aria-label="Slides"></aside>

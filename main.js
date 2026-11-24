@@ -12,6 +12,7 @@ function createWindow() {
     minHeight: 700,
     backgroundColor: '#000000',
     autoHideMenuBar: true,
+    icon: path.join(__dirname, 'renderer', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
