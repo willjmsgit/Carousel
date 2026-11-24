@@ -19,7 +19,7 @@ The editor is always on the left. **Live preview** (top bar) puts the Instagram 
 - **Layers**: add photos or text on top of any slide, or drag a slide from the rail onto the canvas (Alt keeps the original). Move, resize (corner handles), rotate (top handle, Shift snaps to 15°), fade and reorder.
 - **Text**: five styles (Classic, Modern, Neon, Typewriter, Strong) in system fonts, colours, alignment and an optional text background. Double-click text on the canvas to edit it.
 - **Backgrounds**: solid colours and Instagram-style gradients. They show behind a photo set to "Fit with border", and fill a **blank slide** (the tile at the bottom of the rail).
-- **Feed / Profile**: username, caption, light/dark and grid options live in the preview pane. In the grid, drag a tile to move the crop.
+- **Feed / Profile**: username, caption, light/dark and options live in the preview pane.
 
 Undo/redo: Ctrl+Z / Ctrl+Shift+Z. Alt+Left/Right reorders the open slide, Delete removes the layer or slide.
 
@@ -34,5 +34,5 @@ Undo/redo: Ctrl+Z / Ctrl+Shift+Z. Alt+Left/Right reorders the open slide, Delete
 - Feed range 3:4 to 1.91:1; wider/taller is clamped. Presets: 3:4, 4:5, 1:1, 1.91:1.
 - "Match first slide": first slide sets the frame, others are cropped to it (what Meta's API does).
 - "Mixed sizes": each slide keeps its own ratio. Instagram added this in 2024 but does not document how it sizes the frame, so this is an approximation.
-- Profile grid: first slide only, centre-cropped to 3:4 (or 1:1 for the old grid).
+- Profile grid: first slide only, centre-cropped to 3:4.
 - Max 20 slides. HEIC is not readable by the app; convert to JPG/PNG first.

@@ -85,16 +85,13 @@
   const isLight = (hex) => { const n = parseInt(hex.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 150; };
 
   const state = {
-    slides: [], // [{ id, asset, rot, flip, zoom, panX, panY, fit, bg, adj, gridOff, layers: [{ id, asset, cx, cy, w, rot, flip, opacity }] }]
+    slides: [], // [{ id, asset, rot, flip, zoom, panX, panY, fit, bg, adj, layers: [{ id, asset, cx, cy, w, rot, flip, opacity }] }]
     sel: 0,
     layer: null, // selected layer id on the selected slide; null = the background photo
     preview: 'feed', // off | feed | grid: live preview beside the editor
     ratio: 'auto',
     mode: 'match',
     theme: 'light',
-    gridShape: 'new',
-    gridFill: 'post',
-    showCrop: true,
     username: 'yourname',
     caption: 'Your caption goes here. Instagram collapses long captions after about two lines, so the first sentence matters most.',
   };
@@ -160,7 +157,7 @@
     }
     return out;
   }
-  const newSlide = (a) => ({ id: ++uid, asset: a.id, rot: 0, flip: false, zoom: 1, panX: 0, panY: 0, fit: 'cover', bg: '#000000', adj: DEFAULT_ADJ(), gridOff: { x: 0, y: 0 }, layers: [] });
+  const newSlide = (a) => ({ id: ++uid, asset: a.id, rot: 0, flip: false, zoom: 1, panX: 0, panY: 0, fit: 'cover', bg: '#000000', adj: DEFAULT_ADJ(), layers: [] });
   function makeLayer(a, s, x = 0.5, y = 0.5) {
     const fa = frameInfo().slideARs[Math.max(0, state.slides.indexOf(s))] || 0.8;
     const w = Math.min(0.5, (0.6 * a.w) / (a.h * fa)); // at most half the frame width and 60% of its height
@@ -463,7 +460,6 @@
       : val === 'first' ? `Every slide is cropped to slide 1’s shape (${nm}).` : `Every slide is cropped to ${nm}.`;
     const g2 = txt('span', 'muted hint', hint);
     b.append(g1, g2, el('span', 'spacer'));
-    b.append(toggle('Profile crop guides', state.showCrop, (v) => { state.showCrop = v; paintEdit(); }, 'Shade the parts of slide 1 that the profile grid crops away'));
   }
 
   // ----- slide rail -----
@@ -557,6 +553,7 @@
       const pane = el('aside', 'preview');
       st.append(pane);
       buildPreview(pane);
+      layoutEdit(); // the pane takes width, so size the canvas again
     }
   }
   function renderEdit() {
@@ -653,17 +650,6 @@
       Object.assign(ed.ghost.style, { display: 'block', left: `${pl.cx - dw / 2}px`, top: `${pl.cy - dh / 2}px`, width: `${dw}px`, height: `${dh}px` });
     } else ed.ghost.style.display = 'none';
 
-    ed.crop.innerHTML = '';
-    if (state.showCrop && (state.sel === 0 || state.gridFill === 'each')) {
-      const g = L.gridCrop(ar, state.gridShape === 'new' ? L.GRID_AR : 1, s.gridOff.x, s.gridOff.y);
-      if (g.w < 1) {
-        const l = el('div', 'dim l'), r = el('div', 'dim r');
-        l.style.width = `${g.x * 100}%`;
-        r.style.width = `${(1 - g.x - g.w) * 100}%`;
-        ed.crop.append(l, r);
-      }
-    }
-
     const ly = curLayer();
     if (!ly) { ed.box.style.display = 'none'; return; }
     const bx = layerBox(ly, W);
@@ -681,18 +667,17 @@
     const holder = el('div', 'edit-holder');
     const wrap = el('div', 'canvas-wrap');
     const canvas = document.createElement('canvas');
-    const crop = el('div', 'crop');
     const box = el('div', 'selbox');
     ['nw', 'ne', 'sw', 'se'].forEach((k) => box.append(el('div', `handle ${k}`)));
     box.append(el('div', 'stem'), el('div', 'handle rot'));
     const ghost = document.createElement('canvas');
     ghost.className = 'ghost';
-    wrap.append(ghost, canvas, crop, box);
+    wrap.append(ghost, canvas, box);
     holder.append(wrap);
     st.prepend(holder);
     const badge = button('zoom-badge', '100%', 'Reset zoom (Ctrl+0)', resetView);
     holder.append(badge);
-    ed = { holder, wrap, canvas, ghost, crop, box, badge };
+    ed = { holder, wrap, canvas, ghost, box, badge };
 
     // Handles: resize and rotate the selected layer. They capture the pointer themselves.
     box.addEventListener('pointerdown', (e) => {
@@ -841,9 +826,9 @@
   // ----- profile grid -----
   function buildGrid(st) {
     const info = frameInfo();
-    const tileAR = state.gridShape === 'new' ? L.GRID_AR : 1;
-    const list = state.gridFill === 'each' ? state.slides.map((s, i) => [s, i]) : [[state.slides[0], 0]];
-    const total = state.gridFill === 'each' ? Math.ceil(list.length / 3) * 3 : 9;
+    const tileAR = L.GRID_AR; // Instagram's grid shows only slide 1, centre-cropped to 3:4
+    const list = [[state.slides[0], 0]];
+    const total = 9;
     gridTiles = [];
     const host = el('div', `profile ${state.theme}`);
     const hd = el('div', 'p-head', `<div class="av"><i></i></div><div><div class="un"></div><div class="stats"><span><b>${list.length}</b> posts</span><span><b>1,234</b> followers</span><span><b>321</b> following</span></div></div>`);
@@ -857,29 +842,13 @@
       const tmp = document.createElement('canvas');
       const c = document.createElement('canvas');
       c.width = tw; c.height = th;
-      c.title = 'Drag to move the crop';
       const draw = () => {
-        const cr = L.gridCrop(ar, tileAR, s.gridOff.x, s.gridOff.y);
+        const cr = L.gridCrop(ar, tileAR, 0, 0);
         c.getContext('2d').drawImage(tmp, cr.x * tmp.width, cr.y * tmp.height, cr.w * tmp.width, cr.h * tmp.height, 0, 0, tw, th);
       };
       const fresh = () => { renderSlide(s, tmp, 600, Math.round(600 / ar), false); draw(); };
       fresh();
       gridTiles.push({ idx: i, fresh });
-      let last = null, moved = false;
-      c.addEventListener('pointerdown', (e) => { last = [e.clientX, e.clientY]; moved = false; c.setPointerCapture(e.pointerId); });
-      c.addEventListener('pointermove', (e) => {
-        if (!last) return;
-        const cr = L.gridCrop(ar, tileAR, 0, 0);
-        if (!moved) { checkpoint(); moved = true; }
-        // Drag the picture, so the crop window moves the opposite way (exact for the tile's on-screen size).
-        if (cr.w < 1) s.gridOff.x = L.clamp(s.gridOff.x - ((e.clientX - last[0]) / c.clientWidth) * ((2 * cr.w) / (1 - cr.w)), -1, 1);
-        if (cr.h < 1) s.gridOff.y = L.clamp(s.gridOff.y - ((e.clientY - last[1]) / c.clientHeight) * ((2 * cr.h) / (1 - cr.h)), -1, 1);
-        last = [e.clientX, e.clientY];
-        draw();
-        paintEdit();
-      });
-      c.addEventListener('pointerup', () => (last = null));
-      c.addEventListener('pointercancel', () => (last = null));
       grid.append(c);
     }
     host.append(hd, grid);
@@ -1087,7 +1056,7 @@
     all.style.marginTop = '12px';
     const reset = button('btn wide', 'Reset this photo', null, () => {
       checkpoint();
-      Object.assign(s, { rot: 0, flip: false, zoom: 1, panX: 0, panY: 0, fit: 'cover', bg: '#000000', adj: DEFAULT_ADJ(), gridOff: { x: 0, y: 0 } });
+      Object.assign(s, { rot: 0, flip: false, zoom: 1, panX: 0, panY: 0, fit: 'cover', bg: '#000000', adj: DEFAULT_ADJ() });
       renderAll();
     });
     reset.style.marginTop = '8px';
@@ -1110,7 +1079,7 @@
       c.oninput = () => { state.caption = c.value; syncPreviewText(); };
       f.append(labeled('Caption', c));
     }
-    f.append(el('p', 'note', 'Preview only. These are not exported.'));
+    f.append(el('p', 'note', state.preview === 'grid' ? 'Instagram shows slide 1 on your profile, centre-cropped to 3:4. Preview only.' : 'Preview only. These are not exported.'));
     pane.append(pv.opts, pv.body, f);
     drawPreviewOpts();
     drawPreviewBody();
@@ -1121,10 +1090,6 @@
     const row = (label, ctl) => { const r = el('div', 'pv-row'); r.append(txt('span', '', label), ctl); o.append(r); };
     const redo = (fn) => (v) => { fn(v); drawPreviewOpts(); drawPreviewBody(); paintEdit(); };
     row('Appearance', seg([['light', 'Light'], ['dark', 'Dark']], state.theme, redo((v) => (state.theme = v))));
-    if (state.preview === 'grid') {
-      row('Grid tiles', seg([['new', '3:4'], ['old', '1:1']], state.gridShape, redo((v) => (state.gridShape = v))));
-      row('Show', seg([['post', 'This post'], ['each', 'Every photo']], state.gridFill, redo((v) => (state.gridFill = v))));
-    }
   }
   function drawPreviewBody() {
     pv.body.innerHTML = '';
