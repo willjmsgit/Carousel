@@ -198,7 +198,9 @@ main.no-panel { grid-template-columns: 176px minmax(0, 1fr); }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .row + .row, .sl + .row { margin-top: 10px; }
 .sl { display: grid; grid-template-columns: 78px 1fr 46px; align-items: center; gap: 8px; margin: 6px 0; color: var(--muted); }
-.sl input[type=range] { width: 100%; accent-color: var(--blue); }
+.sl input[type=range] { width: 100%; accent-color: #6b6b6b; }
+.sl.changed input[type=range] { accent-color: var(--blue); }
+.sl select { grid-column: 2 / 4; }
 .sl output { text-align: right; font-variant-numeric: tabular-nums; }
 .field { display: grid; gap: 6px; margin: 0 0 12px; color: var(--muted); }
 

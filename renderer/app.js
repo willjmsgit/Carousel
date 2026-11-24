@@ -51,6 +51,7 @@
   // ---------- state ----------
   const DEFAULT_ADJ = () => ({ brightness: 100, contrast: 100, saturation: 100, warmth: 0, grayscale: 0, sepia: 0 });
   const isDefaultAdj = (a) => Object.entries(DEFAULT_ADJ()).every(([k, v]) => a[k] === v);
+  const filterName = (a) => Object.keys(FILTERS).find((k) => { const t = Object.assign(DEFAULT_ADJ(), FILTERS[k]); return Object.entries(t).every(([key, v]) => a[key] === v); }) || '';
   const FILTERS = {
     Original: {},
     Vivid: { contrast: 112, saturation: 135 },
@@ -103,7 +104,7 @@
     mode: 'match',
     theme: 'light',
     username: 'yourname',
-    caption: 'Your caption goes here. Instagram collapses long captions after about two lines, so the first sentence matters most.',
+    caption: 'Instagram will collapse long captions after abouuuut two lines, so the first sentence matters most, see?^',
   };
   const assets = new Map(); // id -> { id, name, file, img, proxy, w, h }
   const A = (id) => assets.get(id);
@@ -849,7 +850,7 @@
     const acts = el('div', 'acts', `${ic('heart')}${ic('comment')}${ic('send')}`);
     if (n > 1) acts.append(feed.pager);
     acts.append(el('span', 'save', ic('bookmark')));
-    const meta = el('div', 'meta', '<div class="likes">1,234 likes</div><div class="cap"><b></b> <span></span></div><div class="more">more</div>');
+    const meta = el('div', 'meta', '<div class="likes">1 like</div><div class="cap"><b></b> <span></span></div><div class="more">more</div>');
     meta.querySelector('b').textContent = state.username || 'yourname';
     meta.querySelector('.cap span').textContent = state.caption;
 
@@ -906,8 +907,9 @@
     const out = el('output', '', fmt(get()) + unit);
     inp.addEventListener('pointerdown', checkpoint);
     inp.addEventListener('keydown', (e) => { if (!e.repeat) checkpoint(); });
-    inp.oninput = () => { set(+inp.value); out.textContent = fmt(+inp.value) + unit; refresh(); };
-    inp.ondblclick = () => { inp.value = dflt; inp.oninput(); };
+    const mark = () => row.classList.toggle('changed', +inp.value !== dflt);
+    inp.oninput = () => { set(+inp.value); out.textContent = fmt(+inp.value) + unit; mark(); refresh(); const f = $('#filterSel'); if (f && cur()) f.value = filterName(cur().adj); };
+    mark();
     row.append(txt('span', '', label), inp, out);
     return row;
   }
@@ -1051,7 +1053,7 @@
       : layerRow(a0.name, 'Background photo', thumb(a0), state.layer == null, selBg));
     const sec = el('div', 'sec');
     sec.append(head, list);
-    if (!s.layers.length) sec.append(el('p', 'note', 'Add a photo or text above, or drag a slide from the left onto the canvas. Hold Alt to keep the original slide.'));
+    if (!s.layers.length) sec.append(el('p', 'note', 'Add above, or drag from an existing slide. Hold [Alt] to keep the original'));
     p.append(sec);
 
     if (ly) return isText(ly) ? panelText(p, ly) : panelImageLayer(p, ly);
@@ -1075,16 +1077,26 @@
       bg.append(txt('span', '', 'Border background'), bgPicker(s));
       photo.append(bg);
     }
-    photo.append(el('p', 'note', 'Drag the photo to reposition it, scroll to zoom. The faded area outside the frame is what gets cropped.'));
+    photo.append(el('p', 'note', 'Drag the photo to reposition it, scroll to zoom, drag middle mouse to pan'));
     p.append(photo);
 
+    const fsel = document.createElement('select');
+    fsel.id = 'filterSel';
+    Object.keys(FILTERS).forEach((k) => fsel.append(new Option(k, k)));
+    const custom = new Option('Custom', '');
+    custom.disabled = true;
+    fsel.append(custom);
+    fsel.value = filterName(s.adj);
+    fsel.onchange = () => { checkpoint(); s.adj = Object.assign(DEFAULT_ADJ(), FILTERS[fsel.value]); renderPanel(); refresh(); };
+    const frow = el('label', 'sl');
+    frow.append(txt('span', '', 'Filter'), fsel);
     const adjust = section('Adjust',
+      frow,
       slider('Zoom', 1, 4, 0.01, () => s.zoom, (v) => (s.zoom = v), '×', 1),
       slider('Brightness', 50, 150, 1, () => s.adj.brightness, (v) => (s.adj.brightness = v), '%', 100),
       slider('Contrast', 50, 150, 1, () => s.adj.contrast, (v) => (s.adj.contrast = v), '%', 100),
       slider('Saturation', 0, 200, 1, () => s.adj.saturation, (v) => (s.adj.saturation = v), '%', 100),
-      slider('Warmth', -100, 100, 1, () => s.adj.warmth, (v) => (s.adj.warmth = v), '', 0),
-      el('p', 'note', 'Double-click a slider to reset it.'));
+      slider('Warmth', -100, 100, 1, () => s.adj.warmth, (v) => (s.adj.warmth = v), '', 0));
     adjust.querySelector('.sec-head').append(button('icon-btn sm', ic('rotL'), 'Reset zoom and adjustments', () => {
       checkpoint();
       s.zoom = 1;
@@ -1094,8 +1106,6 @@
     }));
     p.append(adjust);
 
-    const chips = el('div', 'row');
-    Object.entries(FILTERS).forEach(([name, vals]) => chips.append(button('chip', name, null, () => { checkpoint(); s.adj = Object.assign(DEFAULT_ADJ(), vals); renderPanel(); refresh(); })));
     const all = button('btn wide', 'Copy these adjustments to all slides', null, () => { checkpoint(); state.slides.forEach((o) => (o.adj = { ...s.adj })); renderAll(); toast('Applied to all slides'); });
     all.style.marginTop = '12px';
     const reset = button('btn wide', 'Reset this photo', null, () => {
@@ -1104,7 +1114,7 @@
       renderAll();
     });
     reset.style.marginTop = '8px';
-    p.append(section('Filters', chips, all, reset));
+    p.append(section(null, all, reset));
   }
 
   // ---------- live preview (feed / profile grid) ----------
